@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Frontend",
+    "slug": "Frontend",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.hafiz_abdulhannan.Frontend"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-video",
+      "@react-native-community/datetimepicker",
+      "expo-audio",
+      "expo-asset"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "07b11450-9a10-4246-988c-084130decb91"
+      }
+    }
+  }
+}
