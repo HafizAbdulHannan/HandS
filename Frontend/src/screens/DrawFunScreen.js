@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { 
   View, StyleSheet, TouchableOpacity, Text, 
-  PanResponder, Dimensions, Image, ActivityIndicator 
+  PanResponder, Dimensions, Image, ActivityIndicator, TextInput 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,8 +14,6 @@ import axiosInstance from '../api/axiosConfig';
 import Toast from 'react-native-toast-message';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import DraggableItem from '../components/DraggableItem';
-import { TextInput } from 'react-native-gesture-handler';
-
 const { width, height } = Dimensions.get('window');
 const COLORS = ['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FFFFFF', '#000000'];
 const STROKES = [2, 5, 10, 20];
