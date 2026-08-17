@@ -61,7 +61,7 @@ export const SocketProvider = ({ children }) => {
   const sendMissYou = () => {
     if (socket && userId && partnerId) {
       const room = [userId, partnerId].sort().join('_');
-      socket.emit('send_miss_you', { room });
+      socket.emit('send_miss_you', { room, partnerId });
       
       // Visual feedback for sender
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -74,7 +74,7 @@ export const SocketProvider = ({ children }) => {
   const sendLoveYou = () => {
     if (socket && userId && partnerId) {
       const room = [userId, partnerId].sort().join('_');
-      socket.emit('send_love_you', { room });
+      socket.emit('send_love_you', { room, partnerId });
       
       // Visual feedback for sender
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -87,7 +87,7 @@ export const SocketProvider = ({ children }) => {
   const sendNotification = (title, message) => {
     if (socket && userId && partnerId) {
       const room = [userId, partnerId].sort().join('_');
-      socket.emit('send_notification', { room, title, message });
+      socket.emit('send_notification', { room, partnerId, title, message });
     }
   };
 

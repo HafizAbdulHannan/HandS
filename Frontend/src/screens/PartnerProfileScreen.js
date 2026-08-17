@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
-import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
+import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
 import Toast from 'react-native-toast-message';
 
 export default function PartnerProfileScreen() {
@@ -126,7 +126,7 @@ export default function PartnerProfileScreen() {
         <View style={styles.infoSection}>
           <View style={[styles.avatarContainer, { overflow: 'hidden' }]}>
             {partner.avatar ? (
-              <Image source={{ uri: `${STATIC_URL}${partner.avatar}` }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+              <Image source={{ uri: getMediaUrl(partner.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
             ) : (
               <Text style={styles.avatarText}>{partner.username ? partner.username.charAt(0).toUpperCase() : 'P'}</Text>
             )}
@@ -164,7 +164,7 @@ export default function PartnerProfileScreen() {
         <View style={styles.postHeader}>
           <View style={[styles.avatarPlaceholder, { overflow: 'hidden' }]}>
             {item.author?.avatar ? (
-              <Image source={{ uri: `${STATIC_URL}${item.author.avatar}` }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+              <Image source={{ uri: getMediaUrl(item.author.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
             ) : (
               <Text style={styles.avatarLetter}>{item.author?.username?.charAt(0).toUpperCase() || 'P'}</Text>
             )}

@@ -13,6 +13,8 @@ import * as ImagePicker from 'expo-image-picker';
 import axiosInstance from '../api/axiosConfig';
 import Toast from 'react-native-toast-message';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
+import DraggableItem from '../components/DraggableItem';
+import { TextInput } from 'react-native-gesture-handler';
 
 const { width, height } = Dimensions.get('window');
 const COLORS = ['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FFFFFF', '#000000'];
@@ -34,8 +36,9 @@ export default function DrawFunScreen() {
   const [placedElements, setPlacedElements] = useState([]);
   
   const [showTools, setShowTools] = useState(false);
-  const [toolMode, setToolMode] = useState('draw'); // 'draw', 'color', 'stroke', 'sticker', 'shape'
+  const [toolMode, setToolMode] = useState('draw'); // 'draw', 'color', 'stroke', 'sticker', 'shape', 'text'
   const [isPosting, setIsPosting] = useState(false);
+  const [textInput, setTextInput] = useState('');
 
   const handlePanResponderGrant = (evt) => {
     if (toolMode !== 'draw') return;
@@ -84,9 +87,18 @@ export default function DrawFunScreen() {
   };
 
   const addSticker = (sticker) => {
-    setPlacedElements([...placedElements, { type: 'text', content: sticker, x: width/2 - 20, y: height/3 }]);
+    setPlacedElements([...placedElements, { type: 'sticker', content: sticker, x: width/2 - 20, y: height/3 }]);
     setShowTools(false);
     setToolMode('draw');
+  };
+
+  const addText = () => {
+    if (textInput.trim()) {
+      setPlacedElements([...placedElements, { type: 'text', content: textInput, x: width/2 - 40, y: height/3, color }]);
+      setTextInput('');
+      setShowTools(false);
+      setToolMode('draw');
+    }
   };
 
   const addShape = (shape) => {
@@ -170,15 +182,28 @@ export default function DrawFunScreen() {
             </Svg>
 
             {placedElements.map((el, i) => {
+              if (el.type === 'sticker') {
+                return (
+                  <DraggableItem key={i} initialX={el.x} initialY={el.y}>
+                    <Text style={{ fontSize: 50 }}>{el.content}</Text>
+                  </DraggableItem>
+                );
+              }
               if (el.type === 'text') {
-                return <Text key={i} style={[styles.sticker, { left: el.x, top: el.y }]}>{el.content}</Text>;
+                return (
+                  <DraggableItem key={i} initialX={el.x} initialY={el.y}>
+                    <Text style={{ fontSize: 24, fontWeight: 'bold', color: el.color }}>{el.content}</Text>
+                  </DraggableItem>
+                );
               }
               if (el.type === 'shape') {
                 return (
-                  <Svg key={i} height="100" width="100" style={{ position: 'absolute', left: el.x, top: el.y }}>
-                    {el.shape === 'rect' && <Rect width="100" height="100" fill={el.color} />}
-                    {el.shape === 'circle' && <Circle cx="50" cy="50" r="50" fill={el.color} />}
-                  </Svg>
+                  <DraggableItem key={i} initialX={el.x} initialY={el.y}>
+                    <Svg height="100" width="100">
+                      {el.shape === 'rect' && <Rect width="100" height="100" fill={el.color} />}
+                      {el.shape === 'circle' && <Circle cx="50" cy="50" r="50" fill={el.color} />}
+                    </Svg>
+                  </DraggableItem>
                 );
               }
               return null;
@@ -200,11 +225,24 @@ export default function DrawFunScreen() {
         <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('sticker'); setShowTools(true); }}>
           <Ionicons name="happy-outline" size={24} color={theme.colors.text} />
         </TouchableOpacity>
+
+        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('text'); setShowTools(true); }}>
+          <Ionicons name="text-outline" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
         
         <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('shape'); setShowTools(true); }}>
           <Ionicons name="shapes-outline" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         
+        <TouchableOpacity style={styles.toolBtn} onPress={() => {
+          setColor('#ffffff');
+          setStrokeWidth(20);
+          setToolMode('draw');
+          Toast.show({ type: 'info', text1: 'Eraser active', text2: 'Draw to erase (white color)' });
+        }}>
+          <Ionicons name="scan-outline" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.toolBtn} onPress={pickImage}>
           <Ionicons name="image-outline" size={24} color={theme.colors.text} />
         </TouchableOpacity>
@@ -245,6 +283,22 @@ export default function DrawFunScreen() {
                 <Text style={{ fontSize: 32 }}>{s}</Text>
               </TouchableOpacity>
             ))}
+
+            {toolMode === 'text' && (
+              <View style={{ width: '100%', paddingHorizontal: 20 }}>
+                <TextInput
+                  style={[styles.textInputStyle, { borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="Enter text..."
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={textInput}
+                  onChangeText={setTextInput}
+                  autoFocus
+                />
+                <TouchableOpacity onPress={addText} style={[styles.addTextBtn, { backgroundColor: theme.colors.primary }]}>
+                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>Add Text</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {toolMode === 'shape' && (
               <>
@@ -361,8 +415,15 @@ const styles = StyleSheet.create({
   shapeBtn: {
     padding: 10,
   },
-  sticker: {
-    position: 'absolute',
-    fontSize: 50,
+  textInputStyle: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+  },
+  addTextBtn: {
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
   }
 });

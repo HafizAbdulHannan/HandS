@@ -65,7 +65,7 @@ exports.joinRoom = async (req, res) => {
 // @access  Private
 exports.getRoom = async (req, res) => {
   try {
-    const room = await WatchRoom.findById(req.params.roomId).populate('host participants', 'name email profilePic');
+    const room = await WatchRoom.findById(req.params.roomId).populate('host participants', 'fullName username email avatar');
     if (!room) {
       return res.status(404).json({ message: 'Room not found' });
     }

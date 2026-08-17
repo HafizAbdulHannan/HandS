@@ -5,7 +5,7 @@ import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
-import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
+import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
 import Toast from 'react-native-toast-message';
 
 export default function ProfileScreen() {
@@ -140,7 +140,7 @@ export default function ProfileScreen() {
       <View style={styles.infoSection}>
         <View style={styles.avatarContainer}>
           {user?.avatar ? (
-            <Image source={{ uri: `${STATIC_URL}${user.avatar}` }} style={styles.avatarImage} />
+            <Image source={{ uri: getMediaUrl(user.avatar) }} style={styles.avatarImage} />
           ) : (
             <Text style={styles.avatarText}>{user?.username ? user.username.charAt(0).toUpperCase() : 'U'}</Text>
           )}
@@ -192,7 +192,7 @@ export default function ProfileScreen() {
         <View style={styles.postHeader}>
           <View style={[styles.avatarPlaceholder, { overflow: 'hidden' }]}>
             {item.author?.avatar ? (
-              <Image source={{ uri: `${STATIC_URL}${item.author.avatar}` }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+              <Image source={{ uri: getMediaUrl(item.author.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
             ) : (
               <Text style={styles.avatarLetter}>{item.author?.username?.charAt(0).toUpperCase() || 'U'}</Text>
             )}

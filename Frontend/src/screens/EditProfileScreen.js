@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
-import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
+import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 
@@ -17,7 +17,7 @@ export default function EditProfileScreen() {
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [username, setUsername] = useState(user?.username || '');
   const [bio, setBio] = useState(user?.bio || '');
-  const [avatarUri, setAvatarUri] = useState(user?.avatar ? `${STATIC_URL}${user.avatar}` : null);
+  const [avatarUri, setAvatarUri] = useState(user?.avatar ? getMediaUrl(user.avatar) : null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 

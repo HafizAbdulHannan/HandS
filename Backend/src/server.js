@@ -22,6 +22,11 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
+const { sendPushNotification } = require('./utils/pushNotification');
+const User = require('./models/User');
+
+const userSocketMap = new Map();
+
 // Routes
 const authRoutes = require('./routes/authRoutes');
 const pairingRoutes = require('./routes/pairingRoutes');
@@ -58,26 +63,51 @@ io.on('connection', (socket) => {
   // Users can join a room that is a combination of both their IDs (sorted to be consistent)
   socket.on('join_pair_room', ({ userId, partnerId }) => {
     if (userId && partnerId) {
+      userSocketMap.set(userId, socket.id);
       const room = [userId, partnerId].sort().join('_');
       socket.join(room);
       console.log(`User ${userId} joined room ${room}`);
     }
   });
 
-  socket.on('send_miss_you', ({ room }) => {
+  socket.on('send_miss_you', async ({ room, partnerId }) => {
     socket.to(room).emit('receive_miss_you', { timestamp: new Date() });
+    if (partnerId) {
+      try {
+        const partner = await User.findById(partnerId);
+        if (partner && partner.pushToken) {
+          await sendPushNotification(partner.pushToken, 'Miss You! ❤️', 'Your partner misses you!');
+        }
+      } catch (e) { console.error(e); }
+    }
   });
 
-  socket.on('send_love_you', ({ room }) => {
+  socket.on('send_love_you', async ({ room, partnerId }) => {
     socket.to(room).emit('receive_love_you', { timestamp: new Date() });
+    if (partnerId) {
+      try {
+        const partner = await User.findById(partnerId);
+        if (partner && partner.pushToken) {
+          await sendPushNotification(partner.pushToken, 'Love You! 😘', 'Your partner loves you!');
+        }
+      } catch (e) { console.error(e); }
+    }
   });
 
   socket.on('update_location', ({ room, location }) => {
     socket.to(room).emit('receive_location', location);
   });
 
-  socket.on('send_notification', ({ room, title, message }) => {
+  socket.on('send_notification', async ({ room, partnerId, title, message }) => {
     socket.to(room).emit('receive_notification', { title, message, timestamp: new Date() });
+    if (partnerId) {
+      try {
+        const partner = await User.findById(partnerId);
+        if (partner && partner.pushToken) {
+          await sendPushNotification(partner.pushToken, title, message);
+        }
+      } catch (e) { console.error(e); }
+    }
   });
 
   socket.on('send_message', ({ room, message }) => {
@@ -93,6 +123,31 @@ io.on('connection', (socket) => {
   socket.on('leave_watch_room', ({ roomCode }) => {
     socket.leave(roomCode);
     console.log(`User ${socket.id} left watch room ${roomCode}`);
+  });
+
+  socket.on('media_uploading', ({ roomCode, progress }) => {
+    socket.to(roomCode).emit('receive_media_uploading', { progress });
+  });
+
+  socket.on('invite_partner_watch', ({ partnerId, roomCode, hostName }) => {
+    const partnerSocketId = userSocketMap.get(partnerId);
+    if (partnerSocketId) {
+      io.to(partnerSocketId).emit('receive_watch_invite', { roomCode, hostName });
+    }
+  });
+
+  socket.on('accept_watch_invite', ({ hostId, guestName }) => {
+    const hostSocketId = userSocketMap.get(hostId);
+    if (hostSocketId) {
+      io.to(hostSocketId).emit('watch_invite_accepted', { guestName });
+    }
+  });
+
+  socket.on('reject_watch_invite', ({ hostId, guestName }) => {
+    const hostSocketId = userSocketMap.get(hostId);
+    if (hostSocketId) {
+      io.to(hostSocketId).emit('watch_invite_rejected', { guestName });
+    }
   });
 
   socket.on('media_play', ({ roomCode, timestamp }) => {
@@ -129,6 +184,12 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
+    for (let [userId, id] of userSocketMap.entries()) {
+      if (id === socket.id) {
+        userSocketMap.delete(userId);
+        break;
+      }
+    }
   });
 });
 

@@ -7,7 +7,7 @@ import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
-import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
+import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
 import FloatingEmojis from '../components/FloatingEmojis';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -322,7 +322,7 @@ export default function HomeScreen({ route }) {
         <View style={styles.postCreatorHeader}>
           <View style={[styles.currentUserAvatar, { overflow: 'hidden' }]}>
             {user?.avatar ? (
-              <Image source={{ uri: `${STATIC_URL}${user.avatar}` }} style={styles.headerProfileImage} />
+              <Image source={{ uri: getMediaUrl(user.avatar) }} style={styles.headerProfileImage} />
             ) : (
               <Text style={styles.currentUserInitial}>{user?.username?.charAt(0).toUpperCase() || 'U'}</Text>
             )}
@@ -393,7 +393,7 @@ export default function HomeScreen({ route }) {
         <View style={styles.headerIcons}>
           <TouchableOpacity style={[styles.headerProfileIcon, { overflow: 'hidden' }]} onPress={() => navigation.navigate('Profile')}>
             {user?.avatar ? (
-              <Image source={{ uri: `${STATIC_URL}${user.avatar}` }} style={styles.headerProfileImage} />
+              <Image source={{ uri: getMediaUrl(user.avatar) }} style={styles.headerProfileImage} />
             ) : (
               <Text style={styles.headerProfileLetter}>{user?.username?.charAt(0).toUpperCase() || 'U'}</Text>
             )}
@@ -405,7 +405,7 @@ export default function HomeScreen({ route }) {
               </View>
               <TouchableOpacity onPress={() => navigation.navigate('PartnerProfile')} style={[styles.headerProfileIcon, { backgroundColor: '#ff9ff3', overflow: 'hidden' }]}>
                 {partner.avatar ? (
-                  <Image source={{ uri: `${STATIC_URL}${partner.avatar}` }} style={styles.headerProfileImage} />
+                  <Image source={{ uri: getMediaUrl(partner.avatar) }} style={styles.headerProfileImage} />
                 ) : (
                   <Text style={styles.headerProfileLetter}>{partner.username?.charAt(0).toUpperCase() || 'P'}</Text>
                 )}
@@ -475,7 +475,7 @@ export default function HomeScreen({ route }) {
             <View style={styles.postHeader}>
               <View style={[styles.avatarPlaceholder, { overflow: 'hidden' }]}>
                 {item.author?.avatar ? (
-                  <Image source={{ uri: `${STATIC_URL}${item.author.avatar}` }} style={styles.headerProfileImage} />
+                  <Image source={{ uri: getMediaUrl(item.author.avatar) }} style={styles.headerProfileImage} />
                 ) : (
                   <Text style={styles.avatarLetter}>{item.author?.username?.charAt(0).toUpperCase() || 'U'}</Text>
                 )}

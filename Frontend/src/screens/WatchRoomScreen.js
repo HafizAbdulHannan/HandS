@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert, Modal, TextInput, StyleSheet, KeyboardAvoidingView, Platform, Share, RefreshControl } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert, Modal, TextInput, StyleSheet, KeyboardAvoidingView, Platform, Share, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
-import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
+import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
 import { Ionicons } from '@expo/vector-icons';
 import YoutubeIframe from 'react-native-youtube-iframe';
 import * as ImagePicker from 'expo-image-picker';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import FloatingEmojis from '../components/FloatingEmojis';
+import Toast from 'react-native-toast-message';
 import createAgoraRtcEngine, { ChannelProfileType, ClientRoleType, RtcSurfaceView } from 'react-native-agora';
 import { PermissionsAndroid } from 'react-native';
 
@@ -34,6 +35,9 @@ const WatchRoomScreen = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [ytInput, setYtInput] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isHostUploading, setIsHostUploading] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isMicOn, setIsMicOn] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -155,6 +159,24 @@ const WatchRoomScreen = () => {
         navigation.goBack();
       });
 
+      socket.on('receive_media_uploading', ({ progress }) => {
+        if (progress < 100) {
+          setIsHostUploading(true);
+          setUploadProgress(progress);
+        } else {
+          setIsHostUploading(false);
+          setUploadProgress(0);
+        }
+      });
+
+      socket.on('watch_invite_accepted', ({ guestName }) => {
+        Toast.show({ type: 'success', text1: `${guestName} accepted your invite!`, position: 'top' });
+      });
+
+      socket.on('watch_invite_rejected', ({ guestName }) => {
+        Toast.show({ type: 'error', text1: `${guestName} declined your invite.`, position: 'top' });
+      });
+
       socket.on('receive_sync_media', ({ timestamp, playing: hostPlaying }) => {
         if (isHost) return;
         
@@ -203,6 +225,9 @@ const WatchRoomScreen = () => {
         socket.off('receive_change_media');
         socket.off('receive_kick_user');
         socket.off('receive_delete_room');
+        socket.off('receive_media_uploading');
+        socket.off('watch_invite_accepted');
+        socket.off('watch_invite_rejected');
         socket.off('receive_sync_media');
         socket.off('receive_reaction');
       }
@@ -331,10 +356,21 @@ const WatchRoomScreen = () => {
         });
 
         const res = await axiosInstance.post('/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (progressEvent) => {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(percentCompleted);
+            if (socket) {
+              socket.emit('media_uploading', { roomCode, progress: percentCompleted });
+            }
+          }
         });
 
         const uploadedUrl = res.data;
+        setUploadProgress(0);
+        if (socket) {
+          socket.emit('media_uploading', { roomCode, progress: 100 });
+        }
         setMediaType('upload');
         setMediaUrl(`${STATIC_URL}${uploadedUrl}`);
         setPlaying(false);
@@ -355,9 +391,36 @@ const WatchRoomScreen = () => {
     }
   };
 
-  const handleScreenShare = () => {
+  const handleScreenShare = async () => {
     if (!isHost) return;
-    Alert.alert('Coming Soon', 'Screen Share with Agora SDK will be implemented in the next build.');
+    try {
+      if (isScreenSharing) {
+        await agoraEngineRef.current?.stopScreenCapture();
+        setIsScreenSharing(false);
+        setMediaType('none');
+        if (socket) {
+          socket.emit('change_media', { roomCode, media: { type: 'none', url: '' } });
+        }
+      } else {
+        await agoraEngineRef.current?.startScreenCapture({
+          captureVideo: true,
+          captureAudio: true,
+          videoParams: {
+            dimensions: { width: 1280, height: 720 },
+            frameRate: 15,
+            bitrate: 1000,
+          }
+        });
+        setIsScreenSharing(true);
+        setMediaType('screen_share');
+        if (socket) {
+          socket.emit('change_media', { roomCode, media: { type: 'screen_share', url: user._id } });
+        }
+      }
+    } catch (error) {
+      console.error('Error with screen share:', error);
+      Alert.alert('Error', 'Could not toggle screen share');
+    }
   };
 
   const handleDeleteRoom = () => {
@@ -397,11 +460,47 @@ const WatchRoomScreen = () => {
     }
   };
 
+  const handleAddParticipant = () => {
+    if (!user.partner) {
+      Alert.alert('No Partner', 'You do not have a partner to invite.');
+      return;
+    }
+    if (socket) {
+      const partnerId = typeof user.partner === 'object' ? user.partner._id : user.partner;
+      socket.emit('invite_partner_watch', {
+        partnerId,
+        roomCode,
+        hostName: user.fullName || user.username || user.email
+      });
+      Alert.alert('Invited', 'An invite has been sent to your partner.');
+    }
+  };
+
+  const handleGoBack = () => {
+    if (isHost) {
+      Alert.alert(
+        'Leave Room',
+        'Do you want to just leave, or delete the room for everyone?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Leave Only', onPress: () => {
+            if (socket) socket.emit('leave_watch_room', { roomCode });
+            navigation.goBack();
+          }},
+          { text: 'Delete Room', style: 'destructive', onPress: handleDeleteRoom }
+        ]
+      );
+    } else {
+      if (socket) socket.emit('leave_watch_room', { roomCode });
+      navigation.goBack();
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
@@ -440,6 +539,29 @@ const WatchRoomScreen = () => {
                 allowsFullscreen
                 allowsPictureInPicture
               />
+            </View>
+          </View>
+        ) : isHostUploading || uploading ? (
+          <View style={styles.noMediaContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={styles.noMediaText}>
+              Host is uploading video... {uploadProgress}%
+            </Text>
+            <View style={{ width: '60%', height: 6, backgroundColor: '#333', marginTop: 15, borderRadius: 3 }}>
+              <View style={{ width: `${uploadProgress}%`, height: '100%', backgroundColor: theme.colors.primary, borderRadius: 3 }} />
+            </View>
+          </View>
+        ) : mediaType === 'screen_share' ? (
+          <View style={styles.playerWrapper}>
+            <View pointerEvents={isHost ? 'auto' : 'none'} style={styles.playerInner}>
+              {isHost ? (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                  <Ionicons name="desktop-outline" size={60} color={theme.colors.primary} />
+                  <Text style={{ color: '#fff', marginTop: 10, fontSize: 16 }}>You are sharing your screen</Text>
+                </View>
+              ) : (
+                <RtcSurfaceView canvas={{ uid: parseInt(mediaUrl) || 0 }} style={{ flex: 1 }} />
+              )}
             </View>
           </View>
         ) : (
@@ -491,10 +613,13 @@ const WatchRoomScreen = () => {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.controlsRow}>
           <TouchableOpacity 
             style={[styles.controlButton, { backgroundColor: theme.colors.card }]}
-            onPress={() => {
+            onPress={async () => {
               const newMicState = !isMicOn;
               setIsMicOn(newMicState);
-              agoraEngineRef.current?.muteLocalAudioStream(!newMicState);
+              if (agoraEngineRef.current) {
+                await agoraEngineRef.current.enableLocalAudio(newMicState);
+                agoraEngineRef.current.muteLocalAudioStream(!newMicState);
+              }
             }}
           >
             <Ionicons name={isMicOn ? "mic" : "mic-off"} size={24} color={isMicOn ? theme.colors.primary : "#ff4757"} />
@@ -503,14 +628,17 @@ const WatchRoomScreen = () => {
           
           <TouchableOpacity 
             style={[styles.controlButton, { backgroundColor: theme.colors.card }]}
-            onPress={() => {
+            onPress={async () => {
               const newVideoState = !isVideoOn;
               setIsVideoOn(newVideoState);
-              agoraEngineRef.current?.muteLocalVideoStream(!newVideoState);
-              if (newVideoState) {
-                agoraEngineRef.current?.startPreview();
-              } else {
-                agoraEngineRef.current?.stopPreview();
+              if (agoraEngineRef.current) {
+                await agoraEngineRef.current.enableLocalVideo(newVideoState);
+                agoraEngineRef.current.muteLocalVideoStream(!newVideoState);
+                if (newVideoState) {
+                  agoraEngineRef.current.startPreview();
+                } else {
+                  agoraEngineRef.current.stopPreview();
+                }
               }
             }}
           >
@@ -559,13 +687,17 @@ const WatchRoomScreen = () => {
           {roomData && roomData.participants.map(p => (
             <View key={p._id} style={[styles.participantRow, { backgroundColor: theme.colors.card }]}>
               <View style={styles.participantInfo}>
-                <View style={[styles.avatar, { backgroundColor: theme.colors.primary }]}>
-                  <Text style={styles.avatarText}>
-                    {p.name ? p.name.charAt(0).toUpperCase() : p.email.charAt(0).toUpperCase()}
-                  </Text>
+                <View style={[styles.avatar, { backgroundColor: theme.colors.primary, overflow: 'hidden' }]}>
+                  {p.avatar ? (
+                    <Image source={{ uri: getMediaUrl(p.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+                  ) : (
+                    <Text style={styles.avatarText}>
+                      {p.fullName ? p.fullName.charAt(0).toUpperCase() : p.username ? p.username.charAt(0).toUpperCase() : p.email.charAt(0).toUpperCase()}
+                    </Text>
+                  )}
                 </View>
                 <Text style={[styles.participantName, { color: theme.colors.text }]}>
-                  {p.name || p.email} {p._id === roomData.host._id ? '(Host)' : ''}
+                  {p.fullName || p.username || p.email} {p._id === roomData.host._id ? '(Host)' : ''}
                 </Text>
               </View>
               
@@ -660,8 +792,16 @@ const WatchRoomScreen = () => {
               style={[styles.settingsActionBtn, { backgroundColor: theme.colors.card }]}
               onPress={handleShareCode}
             >
+              <Ionicons name="share-social-outline" size={22} color={theme.colors.primary} style={{ marginRight: 10 }} />
+              <Text style={[styles.settingsActionText, { color: theme.colors.text }]}>Share Code</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.settingsActionBtn, { backgroundColor: theme.colors.card, marginTop: 10 }]}
+              onPress={handleAddParticipant}
+            >
               <Ionicons name="person-add-outline" size={22} color={theme.colors.primary} style={{ marginRight: 10 }} />
-              <Text style={[styles.settingsActionText, { color: theme.colors.text }]}>Share Code / Add Participant</Text>
+              <Text style={[styles.settingsActionText, { color: theme.colors.text }]}>Add Partner</Text>
             </TouchableOpacity>
 
             {isHost && (

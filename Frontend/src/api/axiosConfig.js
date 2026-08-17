@@ -6,6 +6,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export const STATIC_URL = 'https://hands-production-0d9f.up.railway.app';
 const BASE_URL = `${STATIC_URL}/api`;
 
+export const getMediaUrl = (path) => {
+  if (!path) return null;
+  if (path.startsWith('http')) return path;
+  return path.startsWith('/') ? `${STATIC_URL}${path}` : `${STATIC_URL}/${path}`;
+};
+
 const axiosInstance = axios.create({
   baseURL: BASE_URL,
 });

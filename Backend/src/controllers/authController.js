@@ -144,6 +144,30 @@ const updateProfile = async (req, res) => {
   }
 };
 
+// @desc    Update user location
+// @route   PUT /api/auth/location
+// @access  Private
+const updateLocation = async (req, res) => {
+  try {
+    const { latitude, longitude } = req.body;
+    if (latitude !== undefined && longitude !== undefined) {
+      req.user.location = {
+        lat: latitude,
+        lng: longitude,
+        updatedAt: new Date()
+      };
+      await req.user.save();
+      // Optionally, we can notify partner via socket.io, but the socket is handled in server.js.
+      // Since this is for background updates, we will just save to DB.
+      // Partner map screen will need to periodically fetch or we can integrate socket here if needed.
+    }
+    res.status(200).json({ message: 'Location updated successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 // @desc    Forgot Password
 // @route   POST /api/auth/forgot-password
 // @access  Public
@@ -242,4 +266,5 @@ module.exports = {
   updateProfile,
   forgotPassword,
   resetPassword,
+  updateLocation,
 };

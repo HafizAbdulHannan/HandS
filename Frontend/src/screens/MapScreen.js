@@ -78,10 +78,15 @@ export default function MapScreen() {
     let locationSubscriber;
 
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
+      let { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+      if (fgStatus !== 'granted') {
         setErrorMsg('Permission to access location was denied');
         return;
+      }
+
+      let { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
+      if (bgStatus !== 'granted') {
+        console.log('Background location permission denied. App will only track in foreground.');
       }
 
       locationSubscriber = await Location.watchPositionAsync(
@@ -255,6 +260,7 @@ export default function MapScreen() {
             <MapView
               ref={mapRef}
               style={styles.map}
+              provider="google"
               userInterfaceStyle={isDarkMode ? "dark" : "light"}
               initialRegion={{
                 latitude: location.latitude,
@@ -328,11 +334,41 @@ export default function MapScreen() {
                             console.log('Failed to save sharing state', e);
                           }
                           
-                          if (newState && socketRef.current && roomRef.current && location) {
-                            socketRef.current.emit('update_location', { 
-                              room: roomRef.current, 
-                              location: { latitude: location.latitude, longitude: location.longitude } 
-                            });
+                          
+                          if (newState) {
+                            try {
+                              const { status } = await Location.getBackgroundPermissionsAsync();
+                              if (status === 'granted') {
+                                await Location.startLocationUpdatesAsync('background-location-task', {
+                                  accuracy: Location.Accuracy.High,
+                                  timeInterval: 10000,
+                                  distanceInterval: 10,
+                                  showsBackgroundLocationIndicator: true,
+                                  foregroundService: {
+                                    notificationTitle: "HandS Live Tracking",
+                                    notificationBody: "Sharing your live location with your partner.",
+                                    notificationColor: "#ff6b81",
+                                  }
+                                });
+                              }
+                            } catch (e) {
+                              console.log('Failed to start bg location', e);
+                            }
+                            if (socketRef.current && roomRef.current && location) {
+                              socketRef.current.emit('update_location', { 
+                                room: roomRef.current, 
+                                location: { latitude: location.latitude, longitude: location.longitude } 
+                              });
+                            }
+                          } else {
+                            try {
+                              const hasTask = await Location.hasStartedLocationUpdatesAsync('background-location-task');
+                              if (hasTask) {
+                                await Location.stopLocationUpdatesAsync('background-location-task');
+                              }
+                            } catch (e) {
+                              console.log('Failed to stop bg location', e);
+                            }
                           }
                         }}
                       >

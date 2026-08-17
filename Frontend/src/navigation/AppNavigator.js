@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Platform } from 'react-native';
+import { StyleSheet, View, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import axiosInstance from '../api/axiosConfig';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -42,6 +43,8 @@ const Tab = createBottomTabNavigator();
 function MainTabs() {
   const [pendingCount, setPendingCount] = useState(0);
   const { socket } = useSocket();
+  const { user } = useAuth();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
   const fetchRequestsCount = async () => {
@@ -62,14 +65,40 @@ function MainTabs() {
   }, []);
 
   useEffect(() => {
-    if (socket) {
+    if (socket && user) {
       const handleNewNotification = () => fetchRequestsCount();
       socket.on('receive_notification', handleNewNotification);
+      
+      const handleWatchInvite = ({ roomCode, hostName }) => {
+        Alert.alert(
+          'Watch Room Invite',
+          `${hostName} has invited you to watch something together!`,
+          [
+            { 
+              text: 'Decline', 
+              style: 'cancel',
+              onPress: () => {
+                socket.emit('reject_watch_invite', { hostId: typeof user.partner === 'object' ? user.partner._id : user.partner, guestName: user.fullName || user.username });
+              }
+            },
+            { 
+              text: 'Accept', 
+              onPress: () => {
+                socket.emit('accept_watch_invite', { hostId: typeof user.partner === 'object' ? user.partner._id : user.partner, guestName: user.fullName || user.username });
+                navigation.navigate('WatchRoom', { roomCode, isHost: false });
+              }
+            }
+          ]
+        );
+      };
+      socket.on('receive_watch_invite', handleWatchInvite);
+
       return () => {
         socket.off('receive_notification', handleNewNotification);
+        socket.off('receive_watch_invite', handleWatchInvite);
       };
     }
-  }, [socket]);
+  }, [socket, user, navigation]);
 
   return (
     <Tab.Navigator 
