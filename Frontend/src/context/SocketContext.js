@@ -8,7 +8,7 @@ import { useAuth } from './AuthContext';
 const SocketContext = createContext();
 
 // Make sure to replace this with your machine's local IP or backend URL
-const SOCKET_URL = 'https://hands-production-0d9f.up.railway.app'; // Updated for production server
+const SOCKET_URL = 'https://hands-backend.onrender.com'; // Updated for production server
 
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
