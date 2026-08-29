@@ -25,6 +25,7 @@ export default function DrawFunScreen() {
   const viewShotRef = useRef(null);
 
   const [paths, setPaths] = useState([]);
+  const [redoPaths, setRedoPaths] = useState([]);
   const [currentPath, setCurrentPath] = useState(null);
   
   const [color, setColor] = useState(COLORS[0]);
@@ -32,6 +33,7 @@ export default function DrawFunScreen() {
   
   const [bgImage, setBgImage] = useState(null);
   const [placedElements, setPlacedElements] = useState([]);
+  const [redoElements, setRedoElements] = useState([]);
   
   const [showTools, setShowTools] = useState(false);
   const [toolMode, setToolMode] = useState('draw'); // 'draw', 'color', 'stroke', 'sticker', 'shape', 'text'
@@ -60,6 +62,7 @@ export default function DrawFunScreen() {
   const handlePanResponderRelease = () => {
     if (currentPath) {
       setPaths([...paths, currentPath]);
+      setRedoPaths([]); // Clear redo stack on new action
       setCurrentPath(null);
     }
   };
@@ -86,6 +89,7 @@ export default function DrawFunScreen() {
 
   const addSticker = (sticker) => {
     setPlacedElements([...placedElements, { type: 'sticker', content: sticker, x: width/2 - 20, y: height/3 }]);
+    setRedoElements([]);
     setShowTools(false);
     setToolMode('draw');
   };
@@ -93,6 +97,7 @@ export default function DrawFunScreen() {
   const addText = () => {
     if (textInput.trim()) {
       setPlacedElements([...placedElements, { type: 'text', content: textInput, x: width/2 - 40, y: height/3, color }]);
+      setRedoElements([]);
       setTextInput('');
       setShowTools(false);
       setToolMode('draw');
@@ -101,15 +106,32 @@ export default function DrawFunScreen() {
 
   const addShape = (shape) => {
     setPlacedElements([...placedElements, { type: 'shape', shape, color, x: width/2 - 50, y: height/3 }]);
+    setRedoElements([]);
     setShowTools(false);
     setToolMode('draw');
   };
 
   const undo = () => {
     if (paths.length > 0) {
+      const lastPath = paths[paths.length - 1];
+      setRedoPaths([...redoPaths, lastPath]);
       setPaths(paths.slice(0, -1));
     } else if (placedElements.length > 0) {
+      const lastEl = placedElements[placedElements.length - 1];
+      setRedoElements([...redoElements, lastEl]);
       setPlacedElements(placedElements.slice(0, -1));
+    }
+  };
+
+  const redo = () => {
+    if (redoPaths.length > 0) {
+      const pathToRestore = redoPaths[redoPaths.length - 1];
+      setPaths([...paths, pathToRestore]);
+      setRedoPaths(redoPaths.slice(0, -1));
+    } else if (redoElements.length > 0) {
+      const elToRestore = redoElements[redoElements.length - 1];
+      setPlacedElements([...placedElements, elToRestore]);
+      setRedoElements(redoElements.slice(0, -1));
     }
   };
 
@@ -153,7 +175,7 @@ export default function DrawFunScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={[styles.header, { zIndex: 10 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
@@ -247,6 +269,10 @@ export default function DrawFunScreen() {
         
         <TouchableOpacity style={styles.toolBtn} onPress={undo}>
           <Ionicons name="arrow-undo-outline" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.toolBtn} onPress={redo}>
+          <Ionicons name="arrow-redo-outline" size={24} color={theme.colors.text} />
         </TouchableOpacity>
       </View>
 

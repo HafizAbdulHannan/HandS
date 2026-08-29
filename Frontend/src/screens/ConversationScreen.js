@@ -109,6 +109,10 @@ export default function ConversationScreen() {
             keyExtractor={item => item._id}
             contentContainerStyle={styles.messageList}
             showsVerticalScrollIndicator={false}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            initialNumToRender={15}
+            windowSize={5}
             onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
             renderItem={({ item }) => {
               const isMe = item.sender === user._id;

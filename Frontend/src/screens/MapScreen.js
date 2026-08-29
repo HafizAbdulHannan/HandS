@@ -84,11 +84,6 @@ export default function MapScreen() {
         return;
       }
 
-      let { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
-      if (bgStatus !== 'granted') {
-        console.log('Background location permission denied. App will only track in foreground.');
-      }
-
       locationSubscriber = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
@@ -337,7 +332,7 @@ export default function MapScreen() {
                           
                           if (newState) {
                             try {
-                              const { status } = await Location.getBackgroundPermissionsAsync();
+                              const { status } = await Location.requestBackgroundPermissionsAsync();
                               if (status === 'granted') {
                                 await Location.startLocationUpdatesAsync('background-location-task', {
                                   accuracy: Location.Accuracy.High,

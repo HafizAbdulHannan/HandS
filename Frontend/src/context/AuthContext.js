@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
@@ -74,7 +74,7 @@ export const AuthProvider = ({ children }) => {
   // Check token on initial load
   const loadUser = async () => {
     try {
-      const token = await AsyncStorage.getItem('userToken');
+      const token = await SecureStore.getItemAsync('userToken');
       if (token) {
         const response = await axiosInstance.get('/auth/me');
         setUser(response.data);
@@ -82,7 +82,7 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.log('Failed to load user:', error.message);
-      await AsyncStorage.removeItem('userToken');
+      await SecureStore.deleteItemAsync('userToken');
     } finally {
       setLoading(false);
     }
@@ -95,7 +95,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     const response = await axiosInstance.post('/auth/login', { email, password });
     const { token, ...userData } = response.data;
-    await AsyncStorage.setItem('userToken', token);
+    await SecureStore.setItemAsync('userToken', token);
     setUser(userData);
     updatePushTokenInBackend();
     return response.data;
@@ -110,14 +110,14 @@ export const AuthProvider = ({ children }) => {
       password
     });
     const { token, ...userData } = response.data;
-    await AsyncStorage.setItem('userToken', token);
+    await SecureStore.setItemAsync('userToken', token);
     setUser(userData);
     updatePushTokenInBackend();
     return response.data;
   };
 
   const logout = async () => {
-    await AsyncStorage.removeItem('userToken');
+    await SecureStore.deleteItemAsync('userToken');
     setUser(null);
   };
 

@@ -1,4 +1,7 @@
+import 'react-native-gesture-handler';
 import React from 'react';
+import { View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -38,28 +41,48 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   }
 });
 
-function AppContent() {
-  const { isDarkMode } = useThemeContext();
+const AppContent = () => {
+  const { theme, isDarkMode } = useThemeContext();
+  
+  const navTheme = isDarkMode ? {
+    ...DarkTheme,
+    colors: {
+      ...DarkTheme.colors,
+      background: theme.colors.background,
+      card: theme.colors.card,
+    },
+  } : {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      background: theme.colors.background,
+      card: theme.colors.card,
+    },
+  };
 
   return (
-    <SocketProvider>
-      <NavigationContainer theme={isDarkMode ? DarkTheme : DefaultTheme}>
-        <AppNavigator />
-      </NavigationContainer>
-      <StatusBar style={isDarkMode ? "light" : "dark"} />
-    </SocketProvider>
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <SocketProvider>
+        <NavigationContainer theme={navTheme}>
+          <AppNavigator />
+        </NavigationContainer>
+        <StatusBar style={isDarkMode ? "light" : "dark"} />
+      </SocketProvider>
+    </View>
   );
-}
+};
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <ThemeProvider>
-          <AppContent />
-          <Toast />
-        </ThemeProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <ThemeProvider>
+            <AppContent />
+            <Toast />
+          </ThemeProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

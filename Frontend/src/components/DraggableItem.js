@@ -1,51 +1,69 @@
-import React, { useRef } from 'react';
-import { Animated, PanResponder, StyleSheet } from 'react-native';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 const DraggableItem = ({ children, initialX, initialY, zIndex = 100 }) => {
-  const pan = useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
+  const x = useSharedValue(initialX || 0);
+  const y = useSharedValue(initialY || 0);
+  
+  const savedX = useSharedValue(initialX || 0);
+  const savedY = useSharedValue(initialY || 0);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e, gestureState) => {
-        pan.setOffset({
-          x: pan.x._value,
-          y: pan.y._value
-        });
-        pan.setValue({ x: 0, y: 0 });
-      },
-      onPanResponderMove: Animated.event(
-        [null, { dx: pan.x, dy: pan.y }],
-        { useNativeDriver: false }
-      ),
-      onPanResponderRelease: (e, gestureState) => {
-        pan.flattenOffset();
-      },
-      onPanResponderTerminate: (e, gestureState) => {
-        pan.flattenOffset();
-      }
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+
+  const rotation = useSharedValue(0);
+  const savedRotation = useSharedValue(0);
+
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      x.value = savedX.value + e.translationX;
+      y.value = savedY.value + e.translationY;
     })
-  ).current;
+    .onEnd(() => {
+      savedX.value = x.value;
+      savedY.value = y.value;
+    });
+
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = savedScale.value * e.scale;
+    })
+    .onEnd(() => {
+      savedScale.value = scale.value;
+    });
+
+  const rotationGesture = Gesture.Rotation()
+    .onUpdate((e) => {
+      rotation.value = savedRotation.value + e.rotation;
+    })
+    .onEnd(() => {
+      savedRotation.value = rotation.value;
+    });
+
+  const composedGesture = Gesture.Simultaneous(panGesture, pinchGesture, rotationGesture);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateX: x.value },
+        { translateY: y.value },
+        { scale: scale.value },
+        { rotateZ: `${(rotation.value / Math.PI) * 180}deg` }
+      ],
+      position: 'absolute',
+      zIndex,
+    };
+  });
 
   return (
-    <Animated.View
-      style={[
-        pan.getLayout(),
-        styles.draggable,
-        { zIndex }
-      ]}
-      {...panResponder.panHandlers}
-    >
-      {children}
-    </Animated.View>
+    <GestureDetector gesture={composedGesture}>
+      <Animated.View style={animatedStyle}>
+        {children}
+      </Animated.View>
+    </GestureDetector>
   );
 };
-
-const styles = StyleSheet.create({
-  draggable: {
-    position: 'absolute',
-  }
-});
 
 export default DraggableItem;

@@ -45,6 +45,7 @@ const WatchRoomScreen = () => {
   
   // Agora State
   const [isJoined, setIsJoined] = useState(false);
+  const [localUid, setLocalUid] = useState(0);
   const [remoteUids, setRemoteUids] = useState([]);
   const agoraEngineRef = useRef(null);
 
@@ -80,8 +81,9 @@ const WatchRoomScreen = () => {
         agoraEngine.initialize({ appId: AGORA_APP_ID });
         
         agoraEngine.registerEventHandler({
-          onJoinChannelSuccess: () => {
+          onJoinChannelSuccess: (connection) => {
             setIsJoined(true);
+            setLocalUid(connection.localUid);
           },
           onUserJoined: (_connection, uid) => {
             setRemoteUids((prev) => [...prev, uid]);
@@ -339,7 +341,7 @@ const WatchRoomScreen = () => {
     if (!isHost) return;
     try {
       let result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['videos'],
+        mediaTypes: 'videos',
         allowsEditing: false,
         quality: 1,
       });
@@ -414,7 +416,7 @@ const WatchRoomScreen = () => {
         setIsScreenSharing(true);
         setMediaType('screen_share');
         if (socket) {
-          socket.emit('change_media', { roomCode, media: { type: 'screen_share', url: user._id } });
+          socket.emit('change_media', { roomCode, media: { type: 'screen_share', url: localUid.toString() } });
         }
       }
     } catch (error) {
@@ -597,11 +599,13 @@ const WatchRoomScreen = () => {
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={[styles.controlButton, { backgroundColor: theme.colors.card }]}
+              style={[styles.controlButton, { backgroundColor: isScreenSharing ? '#ff4757' : theme.colors.card }]}
               onPress={handleScreenShare}
             >
-              <Ionicons name="desktop-outline" size={28} color={theme.colors.text} />
-              <Text style={[styles.controlButtonText, { color: theme.colors.text }]}>Share Screen</Text>
+              <Ionicons name="desktop-outline" size={28} color={isScreenSharing ? '#fff' : theme.colors.text} />
+              <Text style={[styles.controlButtonText, { color: isScreenSharing ? '#fff' : theme.colors.text }]}>
+                {isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
+              </Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
