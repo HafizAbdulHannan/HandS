@@ -186,6 +186,8 @@ export default function AppNavigator() {
           <Stack.Screen name="WatchRoom" component={WatchRoomScreen} />
           <Stack.Screen name="DrawFun" component={DrawFunScreen} />
           <Stack.Screen name="DrawFunReply" component={DrawFunReplyScreen} />
+          <Stack.Screen name="About" component={AboutScreen} />
+          <Stack.Screen name="Policy" component={PolicyScreen} />
         </>
       ) : (
         // User is not logged in

@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
+import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
 
 export default function ChatScreen() {
   const { user } = useAuth();
@@ -75,7 +75,7 @@ export default function ChatScreen() {
           >
             <View style={[styles.avatarPlaceholder, { overflow: 'hidden' }]}>
               {partner.avatar ? (
-                <Image source={{ uri: `${STATIC_URL}${partner.avatar}` }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+                <Image source={{ uri: getMediaUrl(partner.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
               ) : (
                 <Text style={styles.avatarLetter}>{partner.username.charAt(0).toUpperCase()}</Text>
               )}

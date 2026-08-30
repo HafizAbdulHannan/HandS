@@ -14,7 +14,7 @@ export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [animationType, setAnimationType] = useState(null); // 'miss_you' | 'love_you' | null
   const { user } = useAuth();
-  
+
   const userId = user?._id;
   const partnerId = user?.partner;
 
@@ -62,7 +62,7 @@ export const SocketProvider = ({ children }) => {
     if (socket && userId && partnerId) {
       const room = [userId, partnerId].sort().join('_');
       socket.emit('send_miss_you', { room, partnerId });
-      
+
       // Visual feedback for sender
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       setAnimationType('miss_you');
@@ -75,7 +75,7 @@ export const SocketProvider = ({ children }) => {
     if (socket && userId && partnerId) {
       const room = [userId, partnerId].sort().join('_');
       socket.emit('send_love_you', { room, partnerId });
-      
+
       // Visual feedback for sender
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       setAnimationType('love_you');

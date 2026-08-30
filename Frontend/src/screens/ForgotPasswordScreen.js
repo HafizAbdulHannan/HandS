@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import axiosInstance from '../api/axiosConfig';
+import { useThemeContext } from '../context/ThemeContext';
 import Toast from 'react-native-toast-message';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const navigation = useNavigation();
+  const { theme } = useThemeContext();
 
   const handleRequestOTP = async () => {
     if (!email) {
@@ -34,25 +36,26 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
       <KeyboardAvoidingView 
         style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={28} color="#333" />
+          <Ionicons name="arrow-back" size={28} color={theme.colors.text} />
         </TouchableOpacity>
 
-        <View style={styles.content}>
-          <Text style={styles.title}>Forgot Password?</Text>
-          <Text style={styles.subtitle}>Enter your email address to receive a 6-digit OTP code.</Text>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.content}>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Forgot Password?</Text>
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Enter your email address to receive a 6-digit OTP code.</Text>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={[styles.label, { color: theme.colors.text }]}>Email</Text>
             <TextInput 
-              style={styles.input}
+              style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
               placeholder="bubu@example.com"
-              placeholderTextColor="#aaa"
+              placeholderTextColor={theme.colors.textSecondary}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -60,10 +63,20 @@ export default function ForgotPasswordScreen() {
             />
           </View>
 
-          <TouchableOpacity style={styles.button} activeOpacity={0.8} onPress={handleRequestOTP} disabled={loading}>
-            <Text style={styles.buttonText}>{loading ? 'Sending...' : 'Send OTP'}</Text>
+          <TouchableOpacity 
+            style={[styles.button, { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 }]} 
+            activeOpacity={0.8} 
+            onPress={handleRequestOTP} 
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Send OTP</Text>
+            )}
           </TouchableOpacity>
         </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -72,7 +85,6 @@ export default function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
   },
   keyboardView: {
     flex: 1,
@@ -80,6 +92,9 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 20,
     marginTop: 10,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
     flex: 1,
@@ -90,12 +105,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#1a1a1a',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#888',
     marginBottom: 40,
     fontWeight: '500',
     lineHeight: 22,
@@ -105,19 +118,15 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: '#333',
     marginBottom: 8,
     fontWeight: '600',
     marginLeft: 4,
   },
   input: {
-    backgroundColor: '#f8f9fa',
     borderWidth: 1,
-    borderColor: '#eee',
     borderRadius: 16,
     padding: 18,
     fontSize: 16,
-    color: '#333',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.02,
@@ -125,14 +134,13 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   button: {
-    backgroundColor: '#ff6b81',
     paddingVertical: 18,
     borderRadius: 20,
     alignItems: 'center',
     marginTop: 10,
-    shadowColor: '#ff6b81',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 8,
   },

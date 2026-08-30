@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,11 +7,19 @@ import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
 import axiosInstance from '../api/axiosConfig';
 import Toast from 'react-native-toast-message';
+import * as FileSystem from 'expo-file-system';
+import * as IntentLauncher from 'expo-intent-launcher';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function SettingScreen() {
   const navigation = useNavigation();
   const { user, logout, loadUser } = useAuth();
   const { isDarkMode, toggleTheme, theme } = useThemeContext();
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const UPDATE_DRIVE_ID = "1LhJ2M_SU0DmY7cAyXg8ZhywHRlgxQkt7";
+  const DRIVE_DOWNLOAD_URL = `https://drive.google.com/uc?export=download&id=${UPDATE_DRIVE_ID}`;
 
   const handleLogout = async () => {
     await logout();
@@ -43,6 +51,51 @@ export default function SettingScreen() {
 
   const handleCameraAccess = () => {
     Linking.openSettings();
+  };
+
+  const handleDownloadUpdate = async () => {
+    try {
+      const lastDownloadedId = await AsyncStorage.getItem('downloaded_update_id');
+      if (lastDownloadedId === UPDATE_DRIVE_ID) {
+        Toast.show({ type: 'info', text1: 'Up to Date', text2: 'You already have the latest version.' });
+        return;
+      }
+
+      setIsDownloading(true);
+      setDownloadProgress(0);
+
+      const fileUri = `${FileSystem.documentDirectory}update.apk`;
+
+      const downloadResumable = FileSystem.createDownloadResumable(
+        DRIVE_DOWNLOAD_URL,
+        fileUri,
+        {},
+        (downloadProgress) => {
+          if (downloadProgress.totalBytesExpectedToWrite > 0) {
+            const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
+            setDownloadProgress(progress);
+          }
+        }
+      );
+
+      const { uri } = await downloadResumable.downloadAsync();
+      
+      setIsDownloading(false);
+      Toast.show({ type: 'success', text1: 'Download Complete', text2: 'Starting installation...' });
+
+      await AsyncStorage.setItem('downloaded_update_id', UPDATE_DRIVE_ID);
+
+      const contentUri = await FileSystem.getContentUriAsync(uri);
+      await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+        data: contentUri,
+        flags: 1,
+        type: 'application/vnd.android.package-archive'
+      });
+    } catch (error) {
+      console.log('Update Error:', error);
+      setIsDownloading(false);
+      Toast.show({ type: 'error', text1: 'Update Failed', text2: 'Could not download or install the update.' });
+    }
   };
 
   return (
@@ -85,6 +138,39 @@ export default function SettingScreen() {
           >
             <Ionicons name="camera-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
             <Text style={[styles.menuText, { color: theme.colors.text }]}>Camera Access</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
+            onPress={() => navigation.navigate('Policy')}
+          >
+            <Ionicons name="document-text-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
+            <Text style={[styles.menuText, { color: theme.colors.text }]}>Our Policy</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
+            onPress={() => navigation.navigate('About')}
+          >
+            <Ionicons name="information-circle-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
+            <Text style={[styles.menuText, { color: theme.colors.text }]}>About Us</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
+            onPress={handleDownloadUpdate}
+            disabled={isDownloading}
+          >
+            <Ionicons name="cloud-download-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.menuText, { color: theme.colors.text }]}>Download Update</Text>
+              {isDownloading && (
+                <View style={styles.progressContainer}>
+                  <View style={[styles.progressBar, { width: `${downloadProgress * 100}%` }]} />
+                </View>
+              )}
+            </View>
+            {isDownloading && <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{Math.round(downloadProgress * 100)}%</Text>}
           </TouchableOpacity>
 
           {user?.partner && (
@@ -157,5 +243,17 @@ const styles = StyleSheet.create({
   menuText: {
     fontSize: 16,
     fontWeight: '500',
+  },
+  progressContainer: {
+    height: 4,
+    backgroundColor: '#eee',
+    borderRadius: 2,
+    marginTop: 8,
+    width: '90%',
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#ff6b81',
   }
 });

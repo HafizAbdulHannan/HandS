@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
-import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
+import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import Toast from 'react-native-toast-message';
@@ -197,7 +197,7 @@ export default function GalleryScreen() {
             activeOpacity={0.8}
             onPress={() => setSelectedImage(item)}
           >
-            <Image source={{ uri: item.mediaUrl?.startsWith('http') ? item.mediaUrl : `${STATIC_URL}${item.mediaUrl}` }} style={styles.image} />
+            <Image source={{ uri: getMediaUrl(item.mediaUrl) }} style={styles.image} />
             <View style={styles.uploaderTag}>
                <Text style={styles.uploaderText}>
                  {item.author?._id === user?._id ? 'You' : item.author?.username}
@@ -233,7 +233,7 @@ export default function GalleryScreen() {
           
           {selectedImage && (
             <Image 
-              source={{ uri: selectedImage.mediaUrl?.startsWith('http') ? selectedImage.mediaUrl : `${STATIC_URL}${selectedImage.mediaUrl}` }} 
+              source={{ uri: getMediaUrl(selectedImage.mediaUrl) }} 
               style={styles.fullScreenImage} 
               resizeMode="contain" 
             />

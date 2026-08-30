@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useThemeContext } from '../context/ThemeContext';
 import Toast from 'react-native-toast-message';
 
 export default function SignupScreen() {
@@ -15,40 +16,49 @@ export default function SignupScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   
   const navigation = useNavigation();
   const { register } = useAuth();
+  const { theme } = useThemeContext();
 
   const handleSignup = async () => {
+    if (!fullName || !username || !phoneNumber || !email || !password || !confirmPassword) {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Please fill all fields!' });
+      return;
+    }
     if (password !== confirmPassword) {
       Toast.show({ type: 'error', text1: 'Error', text2: 'Passwords do not match!' });
       return;
     }
     
+    setIsLoading(true);
     try {
       await register(fullName, username, phoneNumber, email, password);
     } catch (error) {
       Toast.show({ type: 'error', text1: 'Signup Failed', text2: error.response?.data?.message || 'Something went wrong' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
       <KeyboardAvoidingView 
         style={styles.keyboardView}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.content}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join H&S to connect with your partner</Text>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Create Account</Text>
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Join H&S to connect with your partner</Text>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Full Name</Text>
+              <Text style={[styles.label, { color: theme.colors.text }]}>Full Name</Text>
               <TextInput 
-                style={styles.input}
+                style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
                 placeholder="e.g. Bubu Ali"
-                placeholderTextColor="#aaa"
+                placeholderTextColor={theme.colors.textSecondary}
                 value={fullName}
                 onChangeText={setFullName}
                 autoCapitalize="words"
@@ -56,11 +66,11 @@ export default function SignupScreen() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Username</Text>
+              <Text style={[styles.label, { color: theme.colors.text }]}>Username</Text>
               <TextInput 
-                style={styles.input}
+                style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
                 placeholder="e.g. Bubu"
-                placeholderTextColor="#aaa"
+                placeholderTextColor={theme.colors.textSecondary}
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
@@ -68,11 +78,11 @@ export default function SignupScreen() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Phone Number</Text>
+              <Text style={[styles.label, { color: theme.colors.text }]}>Phone Number</Text>
               <TextInput 
-                style={styles.input}
+                style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
                 placeholder="+92 300 1234567"
-                placeholderTextColor="#aaa"
+                placeholderTextColor={theme.colors.textSecondary}
                 value={phoneNumber}
                 onChangeText={setPhoneNumber}
                 keyboardType="phone-pad"
@@ -80,11 +90,11 @@ export default function SignupScreen() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={[styles.label, { color: theme.colors.text }]}>Email</Text>
               <TextInput 
-                style={styles.input}
+                style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
                 placeholder="bubu@example.com"
-                placeholderTextColor="#aaa"
+                placeholderTextColor={theme.colors.textSecondary}
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
@@ -93,12 +103,12 @@ export default function SignupScreen() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.passwordContainer}>
+              <Text style={[styles.label, { color: theme.colors.text }]}>Password</Text>
+              <View style={[styles.passwordContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                 <TextInput 
-                  style={styles.passwordInput}
+                  style={[styles.passwordInput, { color: theme.colors.text }]}
                   placeholder="••••••••"
-                  placeholderTextColor="#aaa"
+                  placeholderTextColor={theme.colors.textSecondary}
                   secureTextEntry={!showPassword}
                   value={password}
                   onChangeText={setPassword}
@@ -107,18 +117,18 @@ export default function SignupScreen() {
                   style={styles.eyeIcon} 
                   onPress={() => setShowPassword(!showPassword)}
                 >
-                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color="#888" />
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={theme.colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Confirm Password</Text>
-              <View style={styles.passwordContainer}>
+              <Text style={[styles.label, { color: theme.colors.text }]}>Confirm Password</Text>
+              <View style={[styles.passwordContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                 <TextInput 
-                  style={styles.passwordInput}
+                  style={[styles.passwordInput, { color: theme.colors.text }]}
                   placeholder="••••••••"
-                  placeholderTextColor="#aaa"
+                  placeholderTextColor={theme.colors.textSecondary}
                   secureTextEntry={!showConfirmPassword}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
@@ -127,19 +137,28 @@ export default function SignupScreen() {
                   style={styles.eyeIcon} 
                   onPress={() => setShowConfirmPassword(!showConfirmPassword)}
                 >
-                  <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color="#888" />
+                  <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={theme.colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             </View>
 
-            <TouchableOpacity style={styles.button} activeOpacity={0.8} onPress={handleSignup}>
-              <Text style={styles.buttonText}>Sign Up</Text>
+            <TouchableOpacity 
+              style={[styles.button, { backgroundColor: theme.colors.primary, opacity: isLoading ? 0.7 : 1 }]} 
+              activeOpacity={0.8} 
+              onPress={handleSignup}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Sign Up</Text>
+              )}
             </TouchableOpacity>
 
             <View style={styles.footer}>
-              <Text style={styles.footerText}>Already have an account? </Text>
+              <Text style={[styles.footerText, { color: theme.colors.textSecondary }]}>Already have an account? </Text>
               <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-                <Text style={styles.footerLink}>Log In</Text>
+                <Text style={[styles.footerLink, { color: theme.colors.primary }]}>Log In</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -152,7 +171,6 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
   },
   keyboardView: {
     flex: 1,
@@ -169,12 +187,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 36,
     fontWeight: '800',
-    color: '#1a1a1a',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#888',
     marginBottom: 40,
     fontWeight: '500',
   },
@@ -183,19 +199,15 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: '#333',
     marginBottom: 8,
     fontWeight: '600',
     marginLeft: 4,
   },
   input: {
-    backgroundColor: '#f8f9fa',
     borderWidth: 1,
-    borderColor: '#eee',
     borderRadius: 16,
     padding: 16,
     fontSize: 16,
-    color: '#333',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.02,
@@ -205,9 +217,7 @@ const styles = StyleSheet.create({
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
     borderWidth: 1,
-    borderColor: '#eee',
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -219,20 +229,18 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     fontSize: 16,
-    color: '#333',
   },
   eyeIcon: {
     padding: 16,
   },
   button: {
-    backgroundColor: '#ff6b81',
     paddingVertical: 18,
     borderRadius: 20,
     alignItems: 'center',
     marginTop: 20,
-    shadowColor: '#ff6b81',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 8,
   },
@@ -248,11 +256,9 @@ const styles = StyleSheet.create({
     marginTop: 40,
   },
   footerText: {
-    color: '#888',
     fontSize: 15,
   },
   footerLink: {
-    color: '#ff6b81',
     fontSize: 15,
     fontWeight: 'bold',
   },

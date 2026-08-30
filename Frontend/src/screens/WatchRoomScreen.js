@@ -68,13 +68,6 @@ const WatchRoomScreen = () => {
   // Agora Initialization
   useEffect(() => {
     const setupAgora = async () => {
-      if (Platform.OS === 'android') {
-        await PermissionsAndroid.requestMultiple([
-          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-          PermissionsAndroid.PERMISSIONS.CAMERA,
-        ]);
-      }
-      
       try {
         agoraEngineRef.current = createAgoraRtcEngine();
         const agoraEngine = agoraEngineRef.current;
@@ -86,7 +79,10 @@ const WatchRoomScreen = () => {
             setLocalUid(connection.localUid);
           },
           onUserJoined: (_connection, uid) => {
-            setRemoteUids((prev) => [...prev, uid]);
+            setRemoteUids((prev) => {
+              if (!prev.includes(uid)) return [...prev, uid];
+              return prev;
+            });
           },
           onUserOffline: (_connection, uid) => {
             setRemoteUids((prev) => prev.filter((id) => id !== uid));
@@ -232,6 +228,9 @@ const WatchRoomScreen = () => {
         socket.off('watch_invite_rejected');
         socket.off('receive_sync_media');
         socket.off('receive_reaction');
+      }
+      if (reactionTimeoutRef.current) {
+        clearTimeout(reactionTimeoutRef.current);
       }
     };
   }, []);
@@ -498,6 +497,51 @@ const WatchRoomScreen = () => {
     }
   };
 
+  const handleToggleMic = async () => {
+    if (Platform.OS === 'android') {
+      const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+        Alert.alert('Permission Denied', 'Microphone access is required.');
+        return;
+      }
+    }
+    
+    const newMicState = !isMicOn;
+    if (agoraEngineRef.current) {
+      if (newMicState) {
+        await agoraEngineRef.current.enableLocalAudio(true);
+        await agoraEngineRef.current.muteLocalAudioStream(false);
+      } else {
+        await agoraEngineRef.current.muteLocalAudioStream(true);
+      }
+      setIsMicOn(newMicState);
+    }
+  };
+
+  const handleToggleVideo = async () => {
+    if (Platform.OS === 'android') {
+      const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+        Alert.alert('Permission Denied', 'Camera access is required.');
+        return;
+      }
+    }
+    
+    const newVideoState = !isVideoOn;
+    if (agoraEngineRef.current) {
+      if (newVideoState) {
+        await agoraEngineRef.current.enableLocalVideo(true);
+        await agoraEngineRef.current.muteLocalVideoStream(false);
+        agoraEngineRef.current.startPreview();
+      } else {
+        await agoraEngineRef.current.muteLocalVideoStream(true);
+        await agoraEngineRef.current.enableLocalVideo(false);
+        agoraEngineRef.current.stopPreview();
+      }
+      setIsVideoOn(newVideoState);
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
       {/* Header */}
@@ -617,14 +661,7 @@ const WatchRoomScreen = () => {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.controlsRow}>
           <TouchableOpacity 
             style={[styles.controlButton, { backgroundColor: theme.colors.card }]}
-            onPress={async () => {
-              const newMicState = !isMicOn;
-              setIsMicOn(newMicState);
-              if (agoraEngineRef.current) {
-                await agoraEngineRef.current.enableLocalAudio(newMicState);
-                agoraEngineRef.current.muteLocalAudioStream(!newMicState);
-              }
-            }}
+            onPress={handleToggleMic}
           >
             <Ionicons name={isMicOn ? "mic" : "mic-off"} size={24} color={isMicOn ? theme.colors.primary : "#ff4757"} />
             <Text style={[styles.controlButtonText, { color: theme.colors.text }]}>{isMicOn ? 'Mute' : 'Unmute'}</Text>
@@ -632,19 +669,7 @@ const WatchRoomScreen = () => {
           
           <TouchableOpacity 
             style={[styles.controlButton, { backgroundColor: theme.colors.card }]}
-            onPress={async () => {
-              const newVideoState = !isVideoOn;
-              setIsVideoOn(newVideoState);
-              if (agoraEngineRef.current) {
-                await agoraEngineRef.current.enableLocalVideo(newVideoState);
-                agoraEngineRef.current.muteLocalVideoStream(!newVideoState);
-                if (newVideoState) {
-                  agoraEngineRef.current.startPreview();
-                } else {
-                  agoraEngineRef.current.stopPreview();
-                }
-              }
-            }}
+            onPress={handleToggleVideo}
           >
             <Ionicons name={isVideoOn ? "videocam" : "videocam-off"} size={24} color={isVideoOn ? theme.colors.primary : "#ff4757"} />
             <Text style={[styles.controlButtonText, { color: theme.colors.text }]}>{isVideoOn ? 'Stop Video' : 'Start Video'}</Text>
@@ -665,21 +690,43 @@ const WatchRoomScreen = () => {
 
       {/* Participants */}
       <View style={styles.participantsSection}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Participants & Cameras</Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Live Video Call</Text>
         
-        {/* Remote Users Videos */}
-        {remoteUids.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.remoteVideosScroll}>
-            {remoteUids.map((uid) => (
-              <View key={uid} style={[styles.remoteVideoContainer, { borderColor: theme.colors.primary }]}>
-                <RtcSurfaceView canvas={{ uid }} style={styles.agoraVideoView} />
+        {/* WhatsApp-Style PIP Video Call Area */}
+        {(isVideoOn || remoteUids.length > 0) && (
+          <View style={[styles.videoCallContainer, { backgroundColor: theme.colors.card }]}>
+            {remoteUids.length > 0 ? (
+              <View style={styles.mainVideoContainer}>
+                <RtcSurfaceView canvas={{ uid: remoteUids[0] }} style={styles.agoraVideoView} />
                 <View style={styles.localVideoLabel}>
-                  <Text style={styles.localVideoLabelText}>User {uid}</Text>
+                  <Text style={styles.localVideoLabelText}>Partner</Text>
                 </View>
+                {isVideoOn && (
+                  <View style={[styles.pipVideoContainer, { borderColor: theme.colors.primary }]}>
+                    <RtcSurfaceView canvas={{ uid: 0 }} style={styles.agoraVideoView} />
+                  </View>
+                )}
               </View>
-            ))}
-          </ScrollView>
+            ) : (
+              <View style={styles.mainVideoContainer}>
+                {isVideoOn ? (
+                  <>
+                    <RtcSurfaceView canvas={{ uid: 0 }} style={styles.agoraVideoView} />
+                    <View style={styles.localVideoLabel}>
+                      <Text style={styles.localVideoLabelText}>You (Waiting for partner)</Text>
+                    </View>
+                  </>
+                ) : (
+                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <Ionicons name="videocam-off-outline" size={40} color={theme.colors.textSecondary} />
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
         )}
+
+        <Text style={[styles.sectionTitle, { color: theme.colors.text, marginTop: 15 }]}>Participants</Text>
 
         <ScrollView 
           style={styles.participantsList} 
@@ -720,16 +767,6 @@ const WatchRoomScreen = () => {
           ))}
         </ScrollView>
       </View>
-
-      {/* Local Video Camera */}
-      {isVideoOn && isJoined && (
-        <View style={[styles.localVideoContainer, { borderColor: theme.colors.primary, overflow: 'hidden', backgroundColor: '#000' }]}>
-          <RtcSurfaceView canvas={{ uid: 0 }} style={styles.agoraVideoView} />
-          <View style={styles.localVideoLabel}>
-            <Text style={styles.localVideoLabelText}>You</Text>
-          </View>
-        </View>
-      )}
 
       {/* Floating Emojis Overlay */}
       {activeReaction && <FloatingEmojis emoji={activeReaction} />}
@@ -1029,17 +1066,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  localVideoContainer: {
+  videoCallContainer: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 15,
+    overflow: 'hidden',
+    marginBottom: 10,
+    backgroundColor: '#000',
+  },
+  mainVideoContainer: {
+    flex: 1,
+    position: 'relative',
+    backgroundColor: '#000',
+  },
+  pipVideoContainer: {
     position: 'absolute',
-    bottom: 100,
-    right: 20,
+    bottom: 15,
+    right: 15,
     width: 100,
     height: 150,
     backgroundColor: '#333',
     borderRadius: 12,
     borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'hidden',
     elevation: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1055,6 +1104,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+    zIndex: 10,
   },
   localVideoLabelText: {
     color: '#fff',
@@ -1064,19 +1114,6 @@ const styles = StyleSheet.create({
   agoraVideoView: {
     width: '100%',
     height: '100%',
-  },
-  remoteVideosScroll: {
-    marginBottom: 15,
-  },
-  remoteVideoContainer: {
-    width: 100,
-    height: 150,
-    backgroundColor: '#000',
-    borderRadius: 12,
-    borderWidth: 2,
-    marginRight: 10,
-    overflow: 'hidden',
-    position: 'relative',
   },
   reactionTabContainer: {
     paddingHorizontal: 15,

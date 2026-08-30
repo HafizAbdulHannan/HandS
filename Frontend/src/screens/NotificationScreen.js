@@ -126,10 +126,18 @@ export default function NotificationScreen() {
     }
   };
 
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
   const combinedData = [
     ...requests.map(r => ({ ...r, viewType: 'request' })),
     ...notifications.map(n => ({ ...n, viewType: 'notification' }))
-  ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  ].filter(item => {
+    if (item.viewType === 'request') return true;
+    if (!item.read) return true;
+    const itemDate = new Date(item.createdAt);
+    return itemDate >= todayStart;
+  }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

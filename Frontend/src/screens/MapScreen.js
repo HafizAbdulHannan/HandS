@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeContext } from '../context/ThemeContext';
@@ -255,7 +255,7 @@ export default function MapScreen() {
             <MapView
               ref={mapRef}
               style={styles.map}
-              provider="google"
+              mapType="none"
               userInterfaceStyle={isDarkMode ? "dark" : "light"}
               initialRegion={{
                 latitude: location.latitude,
@@ -264,6 +264,11 @@ export default function MapScreen() {
                 longitudeDelta: 0.0421,
               }}
             >
+              <UrlTile 
+                urlTemplate="https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                maximumZ={19}
+                flipY={false}
+              />
               {activeTab === 'me' && (
                 <Marker coordinate={{ latitude: location.latitude, longitude: location.longitude }} title="You" pinColor={theme.colors.primary} />
               )}

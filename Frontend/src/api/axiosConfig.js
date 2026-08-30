@@ -8,8 +8,9 @@ const BASE_URL = `${STATIC_URL}/api`;
 
 export const getMediaUrl = (path) => {
   if (!path) return null;
-  if (path.startsWith('http')) return path;
-  return path.startsWith('/') ? `${STATIC_URL}${path}` : `${STATIC_URL}/${path}`;
+  let normalizedPath = path.replace(/\\/g, '/');
+  if (normalizedPath.startsWith('http')) return normalizedPath;
+  return normalizedPath.startsWith('/') ? `${STATIC_URL}${normalizedPath}` : `${STATIC_URL}/${normalizedPath}`;
 };
 
 const axiosInstance = axios.create({

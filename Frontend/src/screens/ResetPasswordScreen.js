@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import axiosInstance from '../api/axiosConfig';
+import { useThemeContext } from '../context/ThemeContext';
 import Toast from 'react-native-toast-message';
 
 export default function ResetPasswordScreen() {
@@ -15,6 +16,7 @@ export default function ResetPasswordScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { theme } = useThemeContext();
 
   const handleResetPassword = async () => {
     if (!otp || !newPassword) {
@@ -39,25 +41,26 @@ export default function ResetPasswordScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
       <KeyboardAvoidingView 
         style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={28} color="#333" />
+          <Ionicons name="arrow-back" size={28} color={theme.colors.text} />
         </TouchableOpacity>
 
-        <View style={styles.content}>
-          <Text style={styles.title}>Reset Password</Text>
-          <Text style={styles.subtitle}>Enter the 6-digit OTP sent to {email} and your new password.</Text>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.content}>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Reset Password</Text>
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Enter the 6-digit OTP sent to {email} and your new password.</Text>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>OTP Code</Text>
+            <Text style={[styles.label, { color: theme.colors.text }]}>OTP Code</Text>
             <TextInput 
-              style={styles.input}
+              style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
               placeholder="123456"
-              placeholderTextColor="#aaa"
+              placeholderTextColor={theme.colors.textSecondary}
               value={otp}
               onChangeText={setOtp}
               keyboardType="number-pad"
@@ -66,12 +69,12 @@ export default function ResetPasswordScreen() {
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>New Password</Text>
-            <View style={styles.passwordContainer}>
+            <Text style={[styles.label, { color: theme.colors.text }]}>New Password</Text>
+            <View style={[styles.passwordContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <TextInput 
-                style={styles.passwordInput}
+                style={[styles.passwordInput, { color: theme.colors.text }]}
                 placeholder="••••••••"
-                placeholderTextColor="#aaa"
+                placeholderTextColor={theme.colors.textSecondary}
                 secureTextEntry={!showPassword}
                 value={newPassword}
                 onChangeText={setNewPassword}
@@ -80,15 +83,25 @@ export default function ResetPasswordScreen() {
                 style={styles.eyeIcon} 
                 onPress={() => setShowPassword(!showPassword)}
               >
-                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color="#888" />
+                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
           </View>
 
-          <TouchableOpacity style={styles.button} activeOpacity={0.8} onPress={handleResetPassword} disabled={loading}>
-            <Text style={styles.buttonText}>{loading ? 'Resetting...' : 'Reset Password'}</Text>
+          <TouchableOpacity 
+            style={[styles.button, { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 }]} 
+            activeOpacity={0.8} 
+            onPress={handleResetPassword} 
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Reset Password</Text>
+            )}
           </TouchableOpacity>
         </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -97,7 +110,6 @@ export default function ResetPasswordScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
   },
   keyboardView: {
     flex: 1,
@@ -105,6 +117,9 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 20,
     marginTop: 10,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
     flex: 1,
@@ -115,12 +130,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#1a1a1a',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#888',
     marginBottom: 40,
     fontWeight: '500',
     lineHeight: 22,
@@ -130,19 +143,15 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: '#333',
     marginBottom: 8,
     fontWeight: '600',
     marginLeft: 4,
   },
   input: {
-    backgroundColor: '#f8f9fa',
     borderWidth: 1,
-    borderColor: '#eee',
     borderRadius: 16,
     padding: 18,
     fontSize: 16,
-    color: '#333',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.02,
@@ -152,9 +161,7 @@ const styles = StyleSheet.create({
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
     borderWidth: 1,
-    borderColor: '#eee',
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -166,20 +173,18 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 18,
     fontSize: 16,
-    color: '#333',
   },
   eyeIcon: {
     padding: 18,
   },
   button: {
-    backgroundColor: '#ff6b81',
     paddingVertical: 18,
     borderRadius: 20,
     alignItems: 'center',
     marginTop: 10,
-    shadowColor: '#ff6b81',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 8,
   },

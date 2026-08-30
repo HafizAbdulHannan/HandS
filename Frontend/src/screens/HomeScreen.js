@@ -6,11 +6,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
 import FloatingEmojis from '../components/FloatingEmojis';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as NavigationBar from 'expo-navigation-bar';
 import Toast from 'react-native-toast-message';
 
 export default function HomeScreen({ route }) {
@@ -23,6 +24,14 @@ export default function HomeScreen({ route }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [newPostContent, setNewPostContent] = useState('');
   const [isPosting, setIsPosting] = useState(false);
+  
+  useFocusEffect(
+    React.useCallback(() => {
+      if (Platform.OS === 'android') {
+        NavigationBar.setBackgroundColorAsync(theme.colors.background);
+      }
+    }, [theme.colors.background])
+  );
   
   const [selectedMediaType, setSelectedMediaType] = useState('none');
   const [selectedMedia, setSelectedMedia] = useState(null);
@@ -513,7 +522,7 @@ export default function HomeScreen({ route }) {
             )}
             
             {item.mediaUrl && item.mediaType === 'image' && (
-              <Image source={{ uri: `${STATIC_URL}${item.mediaUrl}` }} style={styles.postImage} />
+              <Image source={{ uri: getMediaUrl(item.mediaUrl) }} style={styles.postImage} />
             )}
             
             <View style={styles.postFooter}>
