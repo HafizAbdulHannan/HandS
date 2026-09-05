@@ -11,23 +11,30 @@ export default function ResetPasswordScreen() {
   const route = useRoute();
   const navigation = useNavigation();
   const email = route.params?.email || '';
+  const otp = route.params?.otp || '';
 
-  const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { theme } = useThemeContext();
 
   const handleResetPassword = async () => {
-    if (!otp || !newPassword) {
+    if (!newPassword || !confirmPassword) {
       Toast.show({ type: 'error', text1: 'Validation Error', text2: 'Please fill in all fields.' });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      Toast.show({ type: 'error', text1: 'Validation Error', text2: 'Passwords do not match.' });
       return;
     }
 
     setLoading(true);
     try {
       await axiosInstance.post('/auth/reset-password', { email, otp, newPassword });
-      Toast.show({ type: 'success', text1: 'Success', text2: 'Password reset successfully. You can now login.' });
+      Toast.show({ type: 'success', text1: 'Awesome!', text2: 'Password has been changed successfully.' });
       navigation.navigate('Login');
     } catch (error) {
       Toast.show({ 
@@ -35,6 +42,8 @@ export default function ResetPasswordScreen() {
         text1: 'Error', 
         text2: error.response?.data?.message || 'Failed to reset password.' 
       });
+      // Fallback to ForgotPassword on failure as requested
+      navigation.navigate('ForgotPassword');
     } finally {
       setLoading(false);
     }
@@ -53,20 +62,7 @@ export default function ResetPasswordScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.content}>
             <Text style={[styles.title, { color: theme.colors.text }]}>Reset Password</Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Enter the 6-digit OTP sent to {email} and your new password.</Text>
-
-          <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>OTP Code</Text>
-            <TextInput 
-              style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
-              placeholder="123456"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={otp}
-              onChangeText={setOtp}
-              keyboardType="number-pad"
-              maxLength={6}
-            />
-          </View>
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Enter your new password.</Text>
 
           <View style={styles.inputContainer}>
             <Text style={[styles.label, { color: theme.colors.text }]}>New Password</Text>
@@ -84,6 +80,26 @@ export default function ResetPasswordScreen() {
                 onPress={() => setShowPassword(!showPassword)}
               >
                 <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={[styles.label, { color: theme.colors.text }]}>Confirm Password</Text>
+            <View style={[styles.passwordContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+              <TextInput 
+                style={[styles.passwordInput, { color: theme.colors.text }]}
+                placeholder="••••••••"
+                placeholderTextColor={theme.colors.textSecondary}
+                secureTextEntry={!showConfirmPassword}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+              />
+              <TouchableOpacity 
+                style={styles.eyeIcon} 
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
           </View>

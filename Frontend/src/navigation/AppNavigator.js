@@ -15,6 +15,7 @@ import IntroScreen from '../screens/IntroScreen';
 import LoginScreen from '../screens/LoginScreen';
 import SignupScreen from '../screens/SignupScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
+import VerifyOTPScreen from '../screens/VerifyOTPScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import PairingScreen from '../screens/PairingScreen';
 import HomeScreen from '../screens/HomeScreen';
@@ -198,6 +199,7 @@ export default function AppNavigator() {
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          <Stack.Screen name="VerifyOTP" component={VerifyOTPScreen} />
           <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
         </>
       )}

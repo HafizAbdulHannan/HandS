@@ -1,7 +1,7 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const nodemailer = require('nodemailer');
+const sendEmail = require('../utils/sendEmail');
 
 // Generate JWT
 const generateToken = (id) => {
@@ -189,38 +189,54 @@ const forgotPassword = async (req, res) => {
     user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
     await user.save();
 
-    // Use ethereal email for testing
-    let testAccount = await nodemailer.createTestAccount();
-    
-    let transporter = nodemailer.createTransport({
-      host: "smtp.ethereal.email",
-      port: 587,
-      secure: false,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass,
-      },
-    });
+    const message = `Dear ${user.fullName},\nhere is you one time pass for HandS app.\n${otp}\nPlease do not share it to anyone. If you don't requested it ignore it and immideately change your password.`;
 
-    const message = {
-      from: '"HandS Support" <support@hands.local>',
-      to: user.email,
-      subject: 'Password Reset OTP',
-      text: `You requested a password reset. Your OTP is: ${otp}`,
-    };
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: 'Forget Password - OTP',
+        message,
+      });
 
-    const info = await transporter.sendMail(message);
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    console.log("OTP: %s", otp);
-    console.log("Preview URL: %s", previewUrl);
+      res.status(200).json({ message: 'OTP sent to email' });
+    } catch (error) {
+      user.resetPasswordOTP = undefined;
+      user.resetPasswordExpire = undefined;
+      await user.save({ validateBeforeSave: false });
 
-    res.status(200).json({ 
-      message: 'OTP sent to email (check server console for Ethereal URL if using test account)', 
-      previewUrl 
-    });
+      console.error(error);
+      return res.status(500).json({ message: 'Email could not be sent' });
+    }
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Email could not be sent' });
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Verify OTP
+// @route   POST /api/auth/verify-otp
+// @access  Public
+const verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    const user = await User.findOne({ 
+      email,
+      resetPasswordExpire: { $gt: Date.now() }
+    });
+
+    if (!user || !user.resetPasswordOTP) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+
+    const isMatch = await bcrypt.compare(otp, user.resetPasswordOTP);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid or expired OTP' });
+    }
+
+    res.status(200).json({ message: 'OTP verified successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
@@ -265,6 +281,7 @@ module.exports = {
   updatePushToken,
   updateProfile,
   forgotPassword,
+  verifyOTP,
   resetPassword,
   updateLocation,
 };

@@ -1,35 +1,40 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import axiosInstance from '../api/axiosConfig';
 import { useThemeContext } from '../context/ThemeContext';
 import Toast from 'react-native-toast-message';
 
-export default function ForgotPasswordScreen() {
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
+export default function VerifyOTPScreen() {
+  const route = useRoute();
   const navigation = useNavigation();
+  const email = route.params?.email || '';
+
+  const [otp, setOtp] = useState('');
+  const [loading, setLoading] = useState(false);
   const { theme } = useThemeContext();
 
-  const handleRequestOTP = async () => {
-    if (!email) {
-      Toast.show({ type: 'error', text1: 'Validation Error', text2: 'Please enter your email.' });
+  const handleVerifyOTP = async () => {
+    if (!otp || otp.length !== 6) {
+      Toast.show({ type: 'error', text1: 'Validation Error', text2: 'Please enter a valid 6-digit OTP.' });
       return;
     }
 
     setLoading(true);
     try {
-      await axiosInstance.post('/auth/forgot-password', { email });
-      Toast.show({ type: 'success', text1: 'Success', text2: 'OTP sent to your email.' });
-      navigation.navigate('VerifyOTP', { email });
+      await axiosInstance.post('/auth/verify-otp', { email, otp });
+      Toast.show({ type: 'success', text1: 'Verified', text2: 'OTP verified successfully.' });
+      navigation.navigate('ResetPassword', { email, otp });
     } catch (error) {
       Toast.show({ 
         type: 'error', 
-        text1: 'Error', 
-        text2: error.response?.data?.message || 'Failed to request OTP. Try again.' 
+        text1: 'Verification Failed', 
+        text2: error.response?.data?.message || 'Invalid or expired OTP.' 
       });
+      // Fallback to ForgotPassword on failure as requested
+      navigation.navigate('ForgotPassword');
     } finally {
       setLoading(false);
     }
@@ -47,35 +52,35 @@ export default function ForgotPasswordScreen() {
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.content}>
-            <Text style={[styles.title, { color: theme.colors.text }]}>Forgot Password?</Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Enter your email address to receive a 6-digit OTP code.</Text>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Verify OTP</Text>
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Enter the 6-digit OTP sent to {email}.</Text>
 
-          <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>Email</Text>
-            <TextInput 
-              style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
-              placeholder="bubu@example.com"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
+            <View style={styles.inputContainer}>
+              <Text style={[styles.label, { color: theme.colors.text }]}>OTP Code</Text>
+              <TextInput 
+                style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
+                placeholder="123456"
+                placeholderTextColor={theme.colors.textSecondary}
+                value={otp}
+                onChangeText={setOtp}
+                keyboardType="number-pad"
+                maxLength={6}
+              />
+            </View>
+
+            <TouchableOpacity 
+              style={[styles.button, { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 }]} 
+              activeOpacity={0.8} 
+              onPress={handleVerifyOTP} 
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Verify OTP</Text>
+              )}
+            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity 
-            style={[styles.button, { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 }]} 
-            activeOpacity={0.8} 
-            onPress={handleRequestOTP} 
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Send OTP</Text>
-            )}
-          </TouchableOpacity>
-        </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
