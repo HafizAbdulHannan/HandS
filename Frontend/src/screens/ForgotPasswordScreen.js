@@ -6,6 +6,15 @@ import { Ionicons } from '@expo/vector-icons';
 import axiosInstance from '../api/axiosConfig';
 import { useThemeContext } from '../context/ThemeContext';
 import Toast from 'react-native-toast-message';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
@@ -21,8 +30,35 @@ export default function ForgotPasswordScreen() {
 
     setLoading(true);
     try {
-      await axiosInstance.post('/auth/forgot-password', { email });
-      Toast.show({ type: 'success', text1: 'Success', text2: 'OTP sent to your email.' });
+      // Request notification permissions
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      const response = await axiosInstance.post('/auth/forgot-password', { email });
+      
+      const mockOtp = response.data?.mockOtp;
+      if (mockOtp) {
+        Toast.show({ type: 'success', text1: 'OTP Generated', text2: `Your OTP is: ${mockOtp} (check notifications)` });
+        
+        if (finalStatus === 'granted') {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "🔒 HandS OTP Verification",
+              body: `Your OTP code is: ${mockOtp}\nDo not share this with anyone.`,
+              sound: true,
+              priority: Notifications.AndroidNotificationPriority.HIGH,
+            },
+            trigger: null,
+          });
+        }
+      } else {
+        Toast.show({ type: 'success', text1: 'Success', text2: 'OTP sent to your email.' });
+      }
+      
       navigation.navigate('VerifyOTP', { email });
     } catch (error) {
       Toast.show({ 

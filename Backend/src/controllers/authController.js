@@ -198,7 +198,7 @@ const forgotPassword = async (req, res) => {
         message,
       });
 
-      res.status(200).json({ message: 'OTP sent to email' });
+      res.status(200).json({ message: 'OTP sent to email', mockOtp: otp });
     } catch (error) {
       user.resetPasswordOTP = undefined;
       user.resetPasswordExpire = undefined;
