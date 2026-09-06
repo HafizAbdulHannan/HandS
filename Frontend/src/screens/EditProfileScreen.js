@@ -26,16 +26,17 @@ export default function EditProfileScreen() {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8,
+      quality: 0.5,
+      base64: true,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const asset = result.assets[0];
-      setAvatarUri(asset.uri);
+      const base64Image = `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`;
+      setAvatarUri(base64Image);
       setSelectedImage({
-        uri: asset.uri,
-        name: asset.fileName || asset.uri.split('/').pop(),
-        type: asset.mimeType || 'image/jpeg'
+        isBase64: true,
+        base64String: base64Image
       });
     }
   };
@@ -58,18 +59,8 @@ export default function EditProfileScreen() {
       if (selectedImage) {
         if (selectedImage.remove) {
           finalAvatarPath = '';
-        } else {
-          const formData = new FormData();
-          formData.append('media', {
-            uri: selectedImage.uri,
-            name: selectedImage.name,
-            type: selectedImage.type,
-          });
-
-          const uploadRes = await axiosInstance.post('/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-          });
-          finalAvatarPath = uploadRes.data;
+        } else if (selectedImage.isBase64) {
+          finalAvatarPath = selectedImage.base64String;
         }
       }
 

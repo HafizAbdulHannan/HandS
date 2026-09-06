@@ -8,6 +8,9 @@ const BASE_URL = `${STATIC_URL}/api`;
 
 export const getMediaUrl = (path) => {
   if (!path) return null;
+  // If it's already a base64 string, return it as is
+  if (path.startsWith('data:image')) return path;
+  
   let normalizedPath = path.replace(/\\/g, '/');
   if (normalizedPath.startsWith('http')) return normalizedPath;
   return normalizedPath.startsWith('/') ? `${STATIC_URL}${normalizedPath}` : `${STATIC_URL}/${normalizedPath}`;

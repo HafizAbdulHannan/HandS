@@ -80,10 +80,12 @@ export default function DrawFunScreen() {
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      quality: 0.8,
+      quality: 0.5,
+      base64: true,
     });
     if (!result.canceled && result.assets) {
-      setBgImage(result.assets[0].uri);
+      const asset = result.assets[0];
+      setBgImage(`data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`);
     }
   };
 
@@ -143,24 +145,11 @@ export default function DrawFunScreen() {
 
     setIsPosting(true);
     try {
-      const uri = await viewShotRef.current.capture();
+      const dataUri = await viewShotRef.current.capture();
       
-      const formData = new FormData();
-      formData.append('media', {
-        uri,
-        name: `drawing_${Date.now()}.jpg`,
-        type: 'image/jpeg',
-      });
-
-      const uploadRes = await axiosInstance.post('/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      
-      const mediaUrl = uploadRes.data;
-
       await axiosInstance.post('/posts', {
         content: 'Check out my drawing! 🎨',
-        mediaUrl,
+        mediaUrl: dataUri,
         mediaType: 'drawing'
       });
 
@@ -188,7 +177,7 @@ export default function DrawFunScreen() {
 
       {/* Canvas */}
       <View style={styles.canvasContainer}>
-        <ViewShot ref={viewShotRef} style={styles.viewShot} options={{ format: 'jpg', quality: 0.9 }}>
+        <ViewShot ref={viewShotRef} style={styles.viewShot} options={{ format: 'jpg', quality: 0.5, result: 'data-uri' }}>
           <View style={styles.canvasBackground} {...panResponder.panHandlers}>
             {bgImage && <Image source={{ uri: bgImage }} style={StyleSheet.absoluteFill} resizeMode="cover" />}
             

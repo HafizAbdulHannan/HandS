@@ -95,9 +95,10 @@ export default function GalleryScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], // Can also support Videos later
+      mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 0.8,
+      quality: 0.5,
+      base64: true,
     });
 
     if (!result.canceled) {
@@ -108,33 +109,12 @@ export default function GalleryScreen() {
   const uploadImage = async (asset) => {
     setIsUploading(true);
     try {
-      // 1. Upload file to backend via multipart/form-data
-      const localUri = asset.uri;
-      const filename = localUri.split('/').pop();
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : `image`;
+      const base64Image = `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`;
 
-      const formData = new FormData();
-      formData.append('media', {
-        uri: localUri,
-        name: filename,
-        type,
-      });
-
-      // Send to /upload endpoint
-      const uploadResponse = await axiosInstance.post('/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      const uploadedImagePath = uploadResponse.data; // e.g. "/uploads/media-12345.jpg"
-      const fullImageUrl = `${baseURL}${uploadedImagePath}`;
-
-      // 2. Create the Post in the DB with the uploaded URL
+      // 2. Create the Post in the DB with the uploaded Base64 string
       await axiosInstance.post('/posts', { 
         content: '',
-        mediaUrl: fullImageUrl,
+        mediaUrl: base64Image,
         mediaType: 'image' 
       });
       
@@ -149,6 +129,33 @@ export default function GalleryScreen() {
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleDelete = () => {
+    if (!selectedImage) return;
+
+    Alert.alert(
+      "Delete Photo",
+      "Are you sure you want to delete this photo from the gallery?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await axiosInstance.delete(`/posts/${selectedImage._id}`);
+              Toast.show({ type: 'success', text1: 'Deleted', text2: 'Photo deleted successfully.' });
+              setSelectedImage(null);
+              fetchGallery();
+            } catch (error) {
+              console.log('Error deleting image:', error);
+              Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to delete photo' });
+            }
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -230,6 +237,15 @@ export default function GalleryScreen() {
               <Ionicons name="download-outline" size={28} color="#fff" />
             )}
           </TouchableOpacity>
+          
+          {selectedImage?.author?._id === user?._id && (
+            <TouchableOpacity 
+              style={styles.deleteButton} 
+              onPress={handleDelete}
+            >
+              <Ionicons name="trash-outline" size={28} color="#fff" />
+            </TouchableOpacity>
+          )}
           
           {selectedImage && (
             <Image 
@@ -382,6 +398,23 @@ const styles = StyleSheet.create({
     right: 30,
     zIndex: 10,
     backgroundColor: '#ff6b81',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  deleteButton: {
+    position: 'absolute',
+    bottom: 50,
+    left: 30,
+    zIndex: 10,
+    backgroundColor: '#ff4757',
     width: 60,
     height: 60,
     borderRadius: 30,

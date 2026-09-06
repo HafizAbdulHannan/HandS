@@ -208,7 +208,8 @@ export default function HomeScreen({ route }) {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 0.8,
+      quality: 0.5,
+      base64: true,
     });
     
     if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -217,7 +218,8 @@ export default function HomeScreen({ route }) {
         uri: asset.uri,
         name: asset.fileName || asset.uri.split('/').pop(),
         mimeType: asset.mimeType || 'image/jpeg',
-        type: 'image'
+        type: 'image',
+        base64String: `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`
       });
       setSelectedMediaType('image');
     }
@@ -268,17 +270,21 @@ export default function HomeScreen({ route }) {
     
     try {
       if (selectedMedia) {
-        const formData = new FormData();
-        formData.append('media', {
-          uri: selectedMedia.uri,
-          name: selectedMedia.name,
-          type: selectedMedia.mimeType,
-        });
-        
-        const uploadResponse = await axiosInstance.post('/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        mediaUrl = uploadResponse.data;
+        if (selectedMedia.base64String) {
+          mediaUrl = selectedMedia.base64String;
+        } else {
+          const formData = new FormData();
+          formData.append('media', {
+            uri: selectedMedia.uri,
+            name: selectedMedia.name,
+            type: selectedMedia.mimeType,
+          });
+          
+          const uploadResponse = await axiosInstance.post('/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          mediaUrl = uploadResponse.data;
+        }
       }
 
       await axiosInstance.post('/posts', { 
