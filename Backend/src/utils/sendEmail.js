@@ -1,40 +1,34 @@
-const nodemailer = require('nodemailer');
-const dns = require('dns');
+const axios = require('axios');
 
-// Force IPv4 for DNS resolution (fixes ENETUNREACH IPv6 errors on some hosts like Render)
-if (dns.setDefaultResultOrder) {
-  dns.setDefaultResultOrder('ipv4first');
-}
 const sendEmail = async (options) => {
-  let transporter;
-  
-  if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-    transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.SMTP_EMAIL,
-        pass: process.env.SMTP_PASSWORD,
+  // Use EmailJS API
+  const serviceId = 'service_gebbac7';
+  const templateId = 'template_l6bl0ij';
+  const publicKey = 'BHVO2cVPIDVUB-NPc';
+
+  try {
+    const response = await axios.post(
+      'https://api.emailjs.com/api/v1.0/email/send',
+      {
+        service_id: serviceId,
+        template_id: templateId,
+        user_id: publicKey,
+        template_params: {
+          to_email: options.email,
+          subject: options.subject,
+          message: options.message,
+        },
       },
-    });
-
-    const message = {
-      from: `${process.env.FROM_NAME || 'HandS'} <${process.env.FROM_EMAIL || process.env.SMTP_EMAIL}>`,
-      to: options.email,
-      subject: options.subject,
-      text: options.message,
-    };
-
-    await transporter.sendMail(message);
-  } else {
-    // Mock the email sending instead of using Ethereal which hangs on Render
-    console.log('\n=================== MOCK EMAIL ===================');
-    console.log(`To: ${options.email}`);
-    console.log(`Subject: ${options.subject}`);
-    console.log(`Message:\n${options.message}`);
-    console.log('==================================================\n');
-    console.log('Note: To send real emails, configure SMTP_EMAIL and SMTP_PASSWORD in .env');
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    console.log('Email sent successfully via EmailJS!');
+  } catch (error) {
+    console.error('Error sending email via EmailJS:', error.response?.data || error.message);
+    throw new Error('EmailJS failed to send email');
   }
 };
 
