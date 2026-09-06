@@ -15,6 +15,8 @@ const sendEmail = async (options) => {
         user_id: publicKey,
         template_params: {
           to_email: options.email,
+          email: options.email, // In case template uses {{email}}
+          to: options.email,    // In case template uses {{to}}
           subject: options.subject,
           message: options.message,
         },
