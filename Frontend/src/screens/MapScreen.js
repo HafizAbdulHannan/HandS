@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeContext } from '../context/ThemeContext';
@@ -47,6 +47,139 @@ export default function MapScreen() {
   useEffect(() => { isSharingLiveRef.current = isSharingLive; }, [isSharingLive]);
   useEffect(() => { socketRef.current = socket; }, [socket]);
   useEffect(() => { roomRef.current = room; }, [room]);
+
+  // Leaflet WebView setup
+  const webViewRef = React.useRef(null);
+  
+  const leafletHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+      <style>
+        body { padding: 0; margin: 0; }
+        html, body, #map { height: 100%; width: 100%; background: #f8f9fa; }
+        .leaflet-control-attribution { display: none; }
+      </style>
+    </head>
+    <body>
+      <div id="map"></div>
+      <script>
+        var map = L.map('map', { zoomControl: false }).setView([0, 0], 2);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19
+        }).addTo(map);
+
+        var myMarker = null;
+        var partnerMarker = null;
+        var routeLine = null;
+        var destMarker = null;
+        
+        var myIcon = L.icon({
+          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+          iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+        
+        var partnerIcon = L.icon({
+          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+          iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+        
+        var destIcon = L.icon({
+          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+          iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+        });
+
+        document.addEventListener('message', function(e) {
+          try {
+            var data = JSON.parse(e.data);
+            
+            if (data.type === 'SYNC') {
+              // Update my location
+              if (data.myLoc) {
+                if (!myMarker) {
+                  myMarker = L.marker([data.myLoc.latitude, data.myLoc.longitude], {icon: myIcon}).addTo(map);
+                  if (!data.partnerLoc) map.setView([data.myLoc.latitude, data.myLoc.longitude], 15);
+                } else {
+                  myMarker.setLatLng([data.myLoc.latitude, data.myLoc.longitude]);
+                }
+                if (data.activeTab === 'me') {
+                  map.setZoom(15);
+                  map.panTo([data.myLoc.latitude, data.myLoc.longitude]);
+                }
+              }
+              
+              // Update partner location
+              if (data.partnerLoc) {
+                if (!partnerMarker) {
+                  partnerMarker = L.marker([data.partnerLoc.latitude, data.partnerLoc.longitude], {icon: partnerIcon}).addTo(map);
+                } else {
+                  partnerMarker.setLatLng([data.partnerLoc.latitude, data.partnerLoc.longitude]);
+                }
+                if (data.activeTab === 'partner') {
+                  map.setZoom(15);
+                  map.panTo([data.partnerLoc.latitude, data.partnerLoc.longitude]);
+                }
+              } else if (partnerMarker) {
+                map.removeLayer(partnerMarker);
+                partnerMarker = null;
+              }
+              
+              // Update Route
+              if (data.tripActive && data.route && data.route.length > 0 && data.activeTab === 'me') {
+                var latlngs = data.route.map(c => [c.latitude, c.longitude]);
+                if (!routeLine) {
+                  routeLine = L.polyline(latlngs, {color: '#45aaf2', weight: 4}).addTo(map);
+                } else {
+                  routeLine.setLatLngs(latlngs);
+                }
+                
+                var destLoc = data.route[data.route.length - 1];
+                if (!destMarker) {
+                  destMarker = L.marker([destLoc.latitude, destLoc.longitude], {icon: destIcon}).addTo(map);
+                } else {
+                  destMarker.setLatLng([destLoc.latitude, destLoc.longitude]);
+                }
+                
+                // Only fit bounds on first route load
+                if (data.isNewRoute) {
+                  map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+                }
+              } else {
+                if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+                if (destMarker) { map.removeLayer(destMarker); destMarker = null; }
+              }
+            }
+            
+            if (data.type === 'RECENTER') {
+              map.setView([data.lat, data.lng], 15);
+            }
+          } catch(err) {}
+        });
+      </script>
+    </body>
+    </html>
+  `;
+
+  // Sync state to WebView
+  useEffect(() => {
+    if (webViewRef.current && location) {
+      webViewRef.current.postMessage(JSON.stringify({
+        type: 'SYNC',
+        myLoc: location,
+        partnerLoc: partnerLocation,
+        activeTab,
+        tripActive,
+        route: routeCoordinates,
+        isNewRoute: routeCoordinates.length > 0 && isRouting === false
+      }));
+    }
+  }, [location, partnerLocation, activeTab, tripActive, routeCoordinates]);
 
   useEffect(() => {
     if (socket) {
@@ -183,13 +316,12 @@ export default function MapScreen() {
 
   const handleRecenter = () => {
     const targetLoc = activeTab === 'me' ? location : partnerLocation;
-    if (targetLoc && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: targetLoc.latitude,
-        longitude: targetLoc.longitude,
-        latitudeDelta: 0.0122,
-        longitudeDelta: 0.0121,
-      }, 1000);
+    if (targetLoc && webViewRef.current) {
+      webViewRef.current.postMessage(JSON.stringify({
+        type: 'RECENTER',
+        lat: targetLoc.latitude,
+        lng: targetLoc.longitude
+      }));
     } else if (activeTab === 'partner' && !partnerLocation) {
       Toast.show({ type: 'info', text1: 'Not Available', text2: 'Partner location not available' });
     }
@@ -201,13 +333,12 @@ export default function MapScreen() {
       if (activeTab === 'me') {
         const currentLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
         setLocation(currentLoc.coords);
-        if (mapRef.current) {
-          mapRef.current.animateToRegion({
-            latitude: currentLoc.coords.latitude,
-            longitude: currentLoc.coords.longitude,
-            latitudeDelta: 0.0122,
-            longitudeDelta: 0.0121,
-          }, 1000);
+        if (webViewRef.current) {
+          webViewRef.current.postMessage(JSON.stringify({
+            type: 'RECENTER',
+            lat: currentLoc.coords.latitude,
+            lng: currentLoc.coords.longitude
+          }));
         }
       } else {
         // Just trigger a re-render/recentering for partner if location exists
@@ -252,44 +383,17 @@ export default function MapScreen() {
           </View>
         ) : (
           <View style={{ flex: 1 }}>
-            <MapView
-              ref={mapRef}
+            <WebView
+              ref={webViewRef}
               style={styles.map}
-              mapType="none"
-              userInterfaceStyle={isDarkMode ? "dark" : "light"}
-              initialRegion={{
-                latitude: location.latitude,
-                longitude: location.longitude,
-                latitudeDelta: 0.0922,
-                longitudeDelta: 0.0421,
-              }}
-            >
-              <UrlTile 
-                urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-                maximumZ={19}
-                flipY={false}
-              />
-              {activeTab === 'me' && (
-                <Marker coordinate={{ latitude: location.latitude, longitude: location.longitude }} title="You" pinColor={theme.colors.primary} />
-              )}
-              {activeTab === 'partner' && partnerLocation && (
-                <Marker coordinate={{ latitude: partnerLocation.latitude, longitude: partnerLocation.longitude }} title="Partner" pinColor="#45aaf2" />
-              )}
-              {tripActive && routeCoordinates.length > 0 && activeTab === 'me' && (
-                <>
-                  <Polyline 
-                    coordinates={routeCoordinates}
-                    strokeColor="#45aaf2"
-                    strokeWidth={4}
-                  />
-                  <Marker 
-                    coordinate={routeCoordinates[routeCoordinates.length - 1]} 
-                    title="Destination" 
-                    pinColor="#2bcbba" 
-                  />
-                </>
-              )}
-            </MapView>
+              source={{ html: leafletHTML }}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              scrollEnabled={false}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              onMessage={(event) => {}}
+            />
             
             {/* Live Speed Badge */}
             <View style={[styles.speedBadge, { backgroundColor: theme.colors.card, shadowColor: theme.colors.text }]}>

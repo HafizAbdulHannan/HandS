@@ -30,11 +30,6 @@
         "FOREGROUND_SERVICE_LOCATION",
         "REQUEST_INSTALL_PACKAGES"
       ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "DUMMY_API_KEY_TO_PREVENT_CRASH"
-        }
-      },
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
