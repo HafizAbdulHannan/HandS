@@ -27,8 +27,9 @@ const sendEmail = async (options) => {
     );
     console.log('Email sent successfully via EmailJS!');
   } catch (error) {
-    console.error('Error sending email via EmailJS:', error.response?.data || error.message);
-    throw new Error('EmailJS failed to send email');
+    const errorMsg = error.response?.data || error.message;
+    console.error('Error sending email via EmailJS:', errorMsg);
+    throw new Error(errorMsg);
   }
 };
 
