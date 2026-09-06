@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, Image, Dimensions, RefreshControl, To
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
@@ -97,8 +98,7 @@ export default function GalleryScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 0.5,
-      base64: true,
+      quality: 1, // Pick full quality, we compress manually
     });
 
     if (!result.canceled) {
@@ -109,18 +109,21 @@ export default function GalleryScreen() {
   const uploadImage = async (asset) => {
     setIsUploading(true);
     try {
-      const base64Image = `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`;
+      // Resize to max 600x600 and compress - results in ~30-80KB payload
+      const manipulated = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 600, height: 600 } }],
+        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      const base64Image = `data:image/jpeg;base64,${manipulated.base64}`;
 
-      // 2. Create the Post in the DB with the uploaded Base64 string
       await axiosInstance.post('/posts', { 
         content: '',
         mediaUrl: base64Image,
         mediaType: 'image' 
       });
       
-      // Notify partner
       sendNotification('New Photo Uploaded! 📸', `${user?.username || 'Your partner'} uploaded a photo to the gallery.`);
-      
       fetchGallery(); 
       Toast.show({ type: 'success', text1: 'Uploaded!', text2: 'Image uploaded successfully.' });
     } catch (error) {

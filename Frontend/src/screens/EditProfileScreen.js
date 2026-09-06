@@ -7,6 +7,7 @@ import { useThemeContext } from '../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import Toast from 'react-native-toast-message';
 
 export default function EditProfileScreen() {
@@ -26,28 +27,25 @@ export default function EditProfileScreen() {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.3,
-      base64: true,
+      quality: 1, // Pick full quality first, we compress manually
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const asset = result.assets[0];
-      if (!asset.base64) {
-        Toast.show({ type: 'error', text1: 'Error', text2: 'Could not read image. Please try again.' });
-        return;
+      try {
+        // Resize to 150x150 - very small size means tiny payload (5-15KB)
+        const manipulated = await ImageManipulator.manipulateAsync(
+          asset.uri,
+          [{ resize: { width: 150, height: 150 } }],
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+        const base64Image = `data:image/jpeg;base64,${manipulated.base64}`;
+        setAvatarUri(base64Image);
+        setSelectedImage({ isBase64: true, base64String: base64Image });
+      } catch (manipErr) {
+        console.log('Image manipulator error:', manipErr);
+        Toast.show({ type: 'error', text1: 'Error', text2: 'Could not process image. Try again.' });
       }
-      const base64Image = `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`;
-      // Check size - base64 string of 2MB means ~1.5MB image which is plenty for an avatar
-      const sizeInMB = (base64Image.length * 0.75) / (1024 * 1024);
-      if (sizeInMB > 2) {
-        Toast.show({ type: 'error', text1: 'Image too large', text2: 'Please select a smaller image' });
-        return;
-      }
-      setAvatarUri(base64Image);
-      setSelectedImage({
-        isBase64: true,
-        base64String: base64Image
-      });
     }
   };
 

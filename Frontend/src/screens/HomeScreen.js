@@ -10,6 +10,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
 import FloatingEmojis from '../components/FloatingEmojis';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as DocumentPicker from 'expo-document-picker';
 import * as NavigationBar from 'expo-navigation-bar';
 import Toast from 'react-native-toast-message';
@@ -208,20 +209,30 @@ export default function HomeScreen({ route }) {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 0.5,
-      base64: true,
+      quality: 1, // Pick full quality, we compress manually
     });
     
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const asset = result.assets[0];
-      setSelectedMedia({
-        uri: asset.uri,
-        name: asset.fileName || asset.uri.split('/').pop(),
-        mimeType: asset.mimeType || 'image/jpeg',
-        type: 'image',
-        base64String: `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`
-      });
-      setSelectedMediaType('image');
+      try {
+        // Resize to 600x600 max - results in ~30-80KB payload for slow connections
+        const manipulated = await ImageManipulator.manipulateAsync(
+          asset.uri,
+          [{ resize: { width: 600, height: 600 } }],
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+        );
+        setSelectedMedia({
+          uri: manipulated.uri,
+          name: asset.fileName || asset.uri.split('/').pop(),
+          mimeType: 'image/jpeg',
+          type: 'image',
+          base64String: `data:image/jpeg;base64,${manipulated.base64}`
+        });
+        setSelectedMediaType('image');
+      } catch (e) {
+        console.log('Image manipulator error:', e);
+        Toast.show({ type: 'error', text1: 'Error', text2: 'Could not process image' });
+      }
     }
   };
 
