@@ -28,10 +28,10 @@ export default function VerifyOTPScreen() {
       Toast.show({ type: 'success', text1: 'Verified', text2: 'OTP verified successfully.' });
       navigation.navigate('ResetPassword', { email, otp });
     } catch (error) {
-      Toast.show({ 
-        type: 'error', 
-        text1: 'Verification Failed', 
-        text2: error.response?.data?.message || 'Invalid or expired OTP.' 
+      Toast.show({
+        type: 'error',
+        text1: 'Verification Failed',
+        text2: error.response?.data?.message || 'Invalid or expired OTP.'
       });
       // Fallback to ForgotPassword on failure as requested
       navigation.navigate('ForgotPassword');
@@ -42,7 +42,7 @@ export default function VerifyOTPScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
@@ -57,7 +57,7 @@ export default function VerifyOTPScreen() {
 
             <View style={styles.inputContainer}>
               <Text style={[styles.label, { color: theme.colors.text }]}>OTP Code</Text>
-              <TextInput 
+              <TextInput
                 style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
                 placeholder="123456"
                 placeholderTextColor={theme.colors.textSecondary}
@@ -68,10 +68,10 @@ export default function VerifyOTPScreen() {
               />
             </View>
 
-            <TouchableOpacity 
-              style={[styles.button, { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 }]} 
-              activeOpacity={0.8} 
-              onPress={handleVerifyOTP} 
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 }]}
+              activeOpacity={0.8}
+              onPress={handleVerifyOTP}
               disabled={loading}
             >
               {loading ? (
