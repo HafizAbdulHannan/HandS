@@ -55,46 +55,13 @@ export default function SettingScreen() {
 
   const handleDownloadUpdate = async () => {
     try {
-      const lastDownloadedId = await AsyncStorage.getItem('downloaded_update_id');
-      if (lastDownloadedId === UPDATE_DRIVE_ID) {
-        Toast.show({ type: 'info', text1: 'Up to Date', text2: 'You already have the latest version.' });
-        return;
-      }
-
-      setIsDownloading(true);
-      setDownloadProgress(0);
-
-      const fileUri = `${FileSystem.documentDirectory}update.apk`;
-
-      const downloadResumable = FileSystem.createDownloadResumable(
-        DRIVE_DOWNLOAD_URL,
-        fileUri,
-        {},
-        (downloadProgress) => {
-          if (downloadProgress.totalBytesExpectedToWrite > 0) {
-            const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
-            setDownloadProgress(progress);
-          }
-        }
-      );
-
-      const { uri } = await downloadResumable.downloadAsync();
-      
-      setIsDownloading(false);
-      Toast.show({ type: 'success', text1: 'Download Complete', text2: 'Starting installation...' });
-
-      await AsyncStorage.setItem('downloaded_update_id', UPDATE_DRIVE_ID);
-
-      const contentUri = await FileSystem.getContentUriAsync(uri);
-      await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-        data: contentUri,
-        flags: 1,
-        type: 'application/vnd.android.package-archive'
-      });
+      // Direct downloading via FileSystem often fails with Google Drive because of virus scan warning pages.
+      // Opening the URL in the browser allows the user to download it reliably.
+      Toast.show({ type: 'info', text1: 'Redirecting', text2: 'Opening browser to download update...' });
+      await Linking.openURL(`https://drive.google.com/file/d/${UPDATE_DRIVE_ID}/view?usp=sharing`);
     } catch (error) {
       console.log('Update Error:', error);
-      setIsDownloading(false);
-      Toast.show({ type: 'error', text1: 'Update Failed', text2: 'Could not download or install the update.' });
+      Toast.show({ type: 'error', text1: 'Update Failed', text2: 'Could not open the download link.' });
     }
   };
 

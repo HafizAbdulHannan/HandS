@@ -4,7 +4,6 @@ const sendEmail = async (options) => {
   let transporter;
   
   if (process.env.SMTP_EMAIL && process.env.SMTP_PASSWORD) {
-    // Use real SMTP if credentials are provided in .env
     transporter = nodemailer.createTransport({
       service: 'gmail', // or your preferred service
       auth: {
@@ -12,32 +11,23 @@ const sendEmail = async (options) => {
         pass: process.env.SMTP_PASSWORD,
       },
     });
+
+    const message = {
+      from: `${process.env.FROM_NAME || 'HandS'} <${process.env.FROM_EMAIL || process.env.SMTP_EMAIL}>`,
+      to: options.email,
+      subject: options.subject,
+      text: options.message,
+    };
+
+    await transporter.sendMail(message);
   } else {
-    // Fallback to ethereal for testing if no credentials are provided
-    const testAccount = await nodemailer.createTestAccount();
-    transporter = nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass,
-      },
-    });
-    console.log('Using Ethereal email for testing. Please set SMTP_EMAIL and SMTP_PASSWORD in .env for production.');
-  }
-
-  const message = {
-    from: `${process.env.FROM_NAME || 'HandS - Heart and Soul'} <${process.env.FROM_EMAIL || process.env.SMTP_EMAIL || 'noreply@hands.local'}>`,
-    to: options.email,
-    subject: options.subject,
-    text: options.message,
-  };
-
-  const info = await transporter.sendMail(message);
-
-  if (!process.env.SMTP_EMAIL) {
-    console.log('Preview URL: %s', nodemailer.getTestMessageUrl(info));
+    // Mock the email sending instead of using Ethereal which hangs on Render
+    console.log('\n=================== MOCK EMAIL ===================');
+    console.log(`To: ${options.email}`);
+    console.log(`Subject: ${options.subject}`);
+    console.log(`Message:\n${options.message}`);
+    console.log('==================================================\n');
+    console.log('Note: To send real emails, configure SMTP_EMAIL and SMTP_PASSWORD in .env');
   }
 };
 
