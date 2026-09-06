@@ -196,6 +196,7 @@ const forgotPassword = async (req, res) => {
         email: user.email,
         subject: 'Forget Password - OTP',
         message,
+        otp, // Explicitly pass the OTP code for EmailJS templates
       });
 
       res.status(200).json({ message: 'OTP sent to email', mockOtp: otp });

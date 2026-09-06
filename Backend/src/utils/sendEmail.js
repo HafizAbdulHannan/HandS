@@ -19,6 +19,8 @@ const sendEmail = async (options) => {
           to: options.email,    // In case template uses {{to}}
           subject: options.subject,
           message: options.message,
+          passcode: options.otp, // For the custom template
+          time: new Date(Date.now() + 15 * 60000).toLocaleTimeString(), // 15 mins from now
         },
       },
       {
