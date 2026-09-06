@@ -85,10 +85,12 @@ export default function EditProfileScreen() {
       Toast.show({ type: 'success', text1: 'Success', text2: 'Profile updated successfully!' });
       navigation.goBack();
     } catch (error) {
+      const errMsg = error.response?.data?.message || error.message || 'Failed to update profile';
       console.log('Error updating profile - Status:', error.response?.status);
       console.log('Error updating profile - Data:', JSON.stringify(error.response?.data));
       console.log('Error updating profile - Message:', error.message);
-      Toast.show({ type: 'error', text1: 'Error', text2: error.response?.data?.message || error.message || 'Failed to update profile' });
+      console.log('Error updating profile - Code:', error.code);
+      Toast.show({ type: 'error', text1: 'Error (' + (error.response?.status || error.code || 'unknown') + ')', text2: errMsg });
     } finally {
       setIsSaving(false);
     }

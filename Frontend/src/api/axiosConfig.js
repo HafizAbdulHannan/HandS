@@ -18,6 +18,7 @@ export const getMediaUrl = (path) => {
 
 const axiosInstance = axios.create({
   baseURL: BASE_URL,
+  timeout: 30000, // 30 seconds for large base64 uploads
 });
 
 // Add a request interceptor to automatically attach the token
@@ -30,6 +31,21 @@ axiosInstance.interceptors.request.use(
     return config;
   },
   (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add a response interceptor to log all errors for debugging
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.log('=== AXIOS ERROR ===');
+    console.log('URL:', error.config?.url);
+    console.log('Status:', error.response?.status);
+    console.log('Data:', JSON.stringify(error.response?.data));
+    console.log('Message:', error.message);
+    console.log('Code:', error.code);
+    console.log('==================');
     return Promise.reject(error);
   }
 );
