@@ -26,13 +26,23 @@ export default function EditProfileScreen() {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.5,
+      quality: 0.3,
       base64: true,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const asset = result.assets[0];
+      if (!asset.base64) {
+        Toast.show({ type: 'error', text1: 'Error', text2: 'Could not read image. Please try again.' });
+        return;
+      }
       const base64Image = `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}`;
+      // Check size - base64 string of 2MB means ~1.5MB image which is plenty for an avatar
+      const sizeInMB = (base64Image.length * 0.75) / (1024 * 1024);
+      if (sizeInMB > 2) {
+        Toast.show({ type: 'error', text1: 'Image too large', text2: 'Please select a smaller image' });
+        return;
+      }
       setAvatarUri(base64Image);
       setSelectedImage({
         isBase64: true,
@@ -75,8 +85,10 @@ export default function EditProfileScreen() {
       Toast.show({ type: 'success', text1: 'Success', text2: 'Profile updated successfully!' });
       navigation.goBack();
     } catch (error) {
-      console.log('Error updating profile:', error);
-      Toast.show({ type: 'error', text1: 'Error', text2: error.response?.data?.message || 'Failed to update profile' });
+      console.log('Error updating profile - Status:', error.response?.status);
+      console.log('Error updating profile - Data:', JSON.stringify(error.response?.data));
+      console.log('Error updating profile - Message:', error.message);
+      Toast.show({ type: 'error', text1: 'Error', text2: error.response?.data?.message || error.message || 'Failed to update profile' });
     } finally {
       setIsSaving(false);
     }

@@ -139,8 +139,10 @@ const updateProfile = async (req, res) => {
     await user.save();
     res.status(200).json(user);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('updateProfile error name:', error.name);
+    console.error('updateProfile error message:', error.message);
+    console.error('updateProfile error code:', error.code);
+    res.status(500).json({ message: error.message || 'Server error' });
   }
 };
 
