@@ -1,5 +1,10 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns');
 
+// Force IPv4 for DNS resolution (fixes ENETUNREACH IPv6 errors on some hosts like Render)
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
 const sendEmail = async (options) => {
   let transporter;
   
