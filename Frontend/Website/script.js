@@ -109,7 +109,7 @@ gsap.from('.rating-card', {
 });
 
 // API URL
-const API_URL = 'http://localhost:5000/api/website';
+const API_URL = 'https://hands-backend.onrender.com/api/website';
 
 // Fetch and render Stats
 async function loadStats() {
