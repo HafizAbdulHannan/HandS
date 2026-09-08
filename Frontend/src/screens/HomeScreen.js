@@ -453,13 +453,15 @@ export default function HomeScreen({ route }) {
             onChangeText={setSearchQuery}
           />
         </View>
-        <TouchableOpacity 
-          style={styles.connectPartnerBtn}
-          onPress={() => navigation.navigate('Pairing')}
-        >
-          <Ionicons name="add" size={18} color="#fff" />
-          <Text style={styles.connectPartnerText}>Partner</Text>
-        </TouchableOpacity>
+        {!user?.partner && (
+          <TouchableOpacity 
+            style={styles.connectPartnerBtn}
+            onPress={() => navigation.navigate('Pairing')}
+          >
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={styles.connectPartnerText}>Partner</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <FlatList
