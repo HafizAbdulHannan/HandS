@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking, ScrollView, ActivityIndicator, Modal, TextInput, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking, ScrollView, ActivityIndicator, Modal, TextInput, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,7 +24,10 @@ export default function SettingScreen() {
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [deleteStep, setDeleteStep] = useState(1);
   const [deleteReason, setDeleteReason] = useState('');
+  const [otherReason, setOtherReason] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDownloadingData, setIsDownloadingData] = useState(false);
 
@@ -62,7 +65,7 @@ export default function SettingScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              await axiosInstance.post('/pairing/disconnect');
+              await axiosInstance.post('/pairing/unpair');
               await loadUser();
               Toast.show({ type: 'success', text1: 'Success', text2: 'Disconnected from partner' });
             } catch (error) {
@@ -124,8 +127,9 @@ export default function SettingScreen() {
   const handleFinalDelete = async () => {
     try {
       setIsDeleting(true);
+      const finalReason = deleteReason === "Others" ? otherReason : deleteReason;
       await axiosInstance.post('/auth/delete-account', {
-        reason: deleteReason,
+        reason: finalReason,
         password: deletePassword
       });
       setIsDeleteModalVisible(false);
@@ -259,98 +263,151 @@ export default function SettingScreen() {
         animationType="slide"
         onRequestClose={() => setIsDeleteModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Delete Account</Text>
-              <TouchableOpacity onPress={() => setIsDeleteModalVisible(false)}>
-                <Ionicons name="close" size={24} color={theme.colors.text} />
-              </TouchableOpacity>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <ScrollView 
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Delete Account</Text>
+                <TouchableOpacity onPress={() => setIsDeleteModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={theme.colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              {deleteStep === 1 && (
+                <View>
+                  <Text style={[styles.modalInstruction, { color: theme.colors.textSecondary }]}>
+                    We're sorry to see you go. Could you tell us your reason for leaving?
+                  </Text>
+                  
+                  <TouchableOpacity 
+                    style={[styles.dropdownSelector, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]} 
+                    onPress={() => setIsDropdownOpen(!isDropdownOpen)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.dropdownText, { color: deleteReason ? theme.colors.text : theme.colors.textSecondary }]}>
+                      {deleteReason || "Select a reason"}
+                    </Text>
+                    <Ionicons name={isDropdownOpen ? "chevron-up" : "chevron-down"} size={20} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
+
+                  {isDropdownOpen && (
+                    <View style={[styles.dropdownList, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                      {["I'm bored", "I wanna create new account", "I don't like this anymore", "Others"].map((reason, index) => (
+                        <TouchableOpacity 
+                          key={index}
+                          style={[styles.dropdownItem, { borderBottomColor: index < 3 ? theme.colors.border : 'transparent' }]}
+                          onPress={() => {
+                            setDeleteReason(reason);
+                            setIsDropdownOpen(false);
+                          }}
+                        >
+                          <Text style={{ color: theme.colors.text }}>{reason}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  {deleteReason === "Others" && (
+                    <TextInput
+                      style={[styles.modalInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text, marginTop: 15, marginBottom: 0 }]}
+                      placeholder="Please specify..."
+                      placeholderTextColor={theme.colors.textSecondary}
+                      value={otherReason}
+                      onChangeText={setOtherReason}
+                      multiline
+                    />
+                  )}
+
+                  <TouchableOpacity 
+                    style={[styles.modalButton, { backgroundColor: '#ff6b81', marginTop: isDropdownOpen ? 15 : 20 }]} 
+                    onPress={() => {
+                      if (deleteReason === "Others" && !otherReason.trim()) {
+                        Toast.show({ type: 'error', text1: 'Required', text2: 'Please specify your reason' });
+                        return;
+                      }
+                      if (deleteReason) setDeleteStep(2);
+                      else Toast.show({ type: 'error', text1: 'Required', text2: 'Please provide a reason' });
+                    }}
+                  >
+                    <Text style={styles.modalButtonText}>Next</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {deleteStep === 2 && (
+                <View>
+                  <Text style={[styles.modalInstruction, { color: theme.colors.textSecondary }]}>
+                    Confirm it's you by entering your password.
+                  </Text>
+                  <View style={[styles.passwordContainer, { backgroundColor: theme.colors.inputBackground }]}>
+                    <TextInput
+                      style={[styles.passwordInput, { color: theme.colors.text }]}
+                      placeholder="Password"
+                      placeholderTextColor={theme.colors.textSecondary}
+                      secureTextEntry={!showPassword}
+                      value={deletePassword}
+                      onChangeText={setDeletePassword}
+                    />
+                    <TouchableOpacity 
+                      style={styles.eyeIcon} 
+                      onPress={() => setShowPassword(!showPassword)}
+                    >
+                      <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity 
+                    style={[styles.modalButton, { backgroundColor: '#ff6b81', marginTop: 10 }]} 
+                    onPress={() => {
+                      if (deletePassword.trim()) setDeleteStep(3);
+                      else Toast.show({ type: 'error', text1: 'Required', text2: 'Please enter your password' });
+                    }}
+                  >
+                    <Text style={styles.modalButtonText}>Next</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {deleteStep === 3 && (
+                <View>
+                  <Text style={[styles.modalInstruction, { color: theme.colors.textSecondary }]}>
+                    Before you go, would you like to download your data? This includes a text file of your posts and folders for all your uploaded images and gallery.
+                  </Text>
+                  
+                  <TouchableOpacity 
+                    style={[styles.modalButton, { backgroundColor: '#45aaf2', marginBottom: 15 }]} 
+                    onPress={handleDownloadData}
+                    disabled={isDownloadingData}
+                  >
+                    {isDownloadingData ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={styles.modalButtonText}>Download your data</Text>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.modalButton, { backgroundColor: '#ff4757' }]} 
+                    onPress={handleFinalDelete}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={styles.modalButtonText}>Delete Account</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
-
-            {deleteStep === 1 && (
-              <View>
-                <Text style={[styles.modalInstruction, { color: theme.colors.textSecondary }]}>
-                  We're sorry to see you go. Could you tell us your professional reason for leaving?
-                </Text>
-                <TextInput
-                  style={[styles.modalInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
-                  placeholder="Professional Reason"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={deleteReason}
-                  onChangeText={setDeleteReason}
-                  multiline
-                />
-                <TouchableOpacity 
-                  style={[styles.modalButton, { backgroundColor: '#ff6b81' }]} 
-                  onPress={() => {
-                    if (deleteReason.trim()) setDeleteStep(2);
-                    else Toast.show({ type: 'error', text1: 'Required', text2: 'Please provide a reason' });
-                  }}
-                >
-                  <Text style={styles.modalButtonText}>Next</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {deleteStep === 2 && (
-              <View>
-                <Text style={[styles.modalInstruction, { color: theme.colors.textSecondary }]}>
-                  Confirm it's you by entering your password.
-                </Text>
-                <TextInput
-                  style={[styles.modalInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
-                  placeholder="Password"
-                  placeholderTextColor={theme.colors.textSecondary}
-                  secureTextEntry
-                  value={deletePassword}
-                  onChangeText={setDeletePassword}
-                />
-                <TouchableOpacity 
-                  style={[styles.modalButton, { backgroundColor: '#ff6b81' }]} 
-                  onPress={() => {
-                    if (deletePassword.trim()) setDeleteStep(3);
-                    else Toast.show({ type: 'error', text1: 'Required', text2: 'Please enter your password' });
-                  }}
-                >
-                  <Text style={styles.modalButtonText}>Next</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {deleteStep === 3 && (
-              <View>
-                <Text style={[styles.modalInstruction, { color: theme.colors.textSecondary }]}>
-                  Before you go, would you like to download your data? This includes a text file of your posts and folders for all your uploaded images and gallery.
-                </Text>
-                
-                <TouchableOpacity 
-                  style={[styles.modalButton, { backgroundColor: '#45aaf2', marginBottom: 15 }]} 
-                  onPress={handleDownloadData}
-                  disabled={isDownloadingData}
-                >
-                  {isDownloadingData ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.modalButtonText}>Download your data</Text>
-                  )}
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={[styles.modalButton, { backgroundColor: '#ff4757' }]} 
-                  onPress={handleFinalDelete}
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.modalButtonText}>Delete Account</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -431,8 +488,6 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 20,
   },
   modalContent: {
     borderRadius: 20,
@@ -442,6 +497,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 20,
     elevation: 5,
+    marginHorizontal: 20,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -464,6 +520,45 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginBottom: 20,
     minHeight: 50,
+  },
+  dropdownSelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 15,
+    minHeight: 50,
+  },
+  dropdownText: {
+    fontSize: 15,
+  },
+  dropdownList: {
+    marginTop: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    padding: 15,
+    borderBottomWidth: 1,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    marginBottom: 20,
+    minHeight: 50,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 15,
+    fontSize: 15,
+  },
+  eyeIcon: {
+    paddingHorizontal: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalButton: {
     padding: 15,

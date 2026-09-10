@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { DeviceEventEmitter } from 'react-native';
 
 // If you are using Android Emulator, use 10.0.2.2 instead of localhost
 // If testing on a physical device, use your computer's local IP address (e.g., 192.168.1.5)
@@ -38,14 +39,19 @@ axiosInstance.interceptors.request.use(
 // Add a response interceptor to log all errors for debugging
 axiosInstance.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     console.log('=== AXIOS ERROR ===');
     console.log('URL:', error.config?.url);
     console.log('Status:', error.response?.status);
     console.log('Data:', JSON.stringify(error.response?.data));
     console.log('Message:', error.message);
-    console.log('Code:', error.code);
     console.log('==================');
+
+    if (error.response?.status === 401) {
+      await SecureStore.deleteItemAsync('userToken');
+      DeviceEventEmitter.emit('force_logout');
+    }
+
     return Promise.reject(error);
   }
 );

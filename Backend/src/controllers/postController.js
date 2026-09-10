@@ -78,38 +78,58 @@ const createPost = async (req, res) => {
 // @desc    Get all posts for the paired users (The Private Feed)
 // @route   GET /api/posts
 // @access  Private (Requires Pairing)
-const getFeed = async (req, res) => {
+const getFeed = async (req, res, next) => {
   try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const startIndex = (page - 1) * limit;
+    
+    // Filter by date if provided (e.g., ?date=today)
+    const query = { author: { $in: req.allowedAuthors } };
+    if (req.query.date === 'today') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      query.createdAt = { $gte: today, $lt: tomorrow };
+    }
+
     // req.allowedAuthors is injected by pairMiddleware
-    const posts = await Post.find({ author: { $in: req.allowedAuthors } })
+    const posts = await Post.find(query)
       .sort({ createdAt: -1 })
+      .skip(startIndex)
+      .limit(limit)
       .populate('author', 'username avatar')
       .populate('comments.user', 'username avatar');
       
     res.status(200).json(posts);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    next(error);
   }
 };
 
 // @desc    Get all media posts (Shared Gallery)
 // @route   GET /api/posts/gallery
 // @access  Private (Requires Pairing)
-const getGallery = async (req, res) => {
+const getGallery = async (req, res, next) => {
   try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 15;
+    const startIndex = (page - 1) * limit;
+
     const mediaPosts = await Post.find({
       author: { $in: req.allowedAuthors },
       mediaType: { $in: ['image', 'video'] }
     })
     .sort({ createdAt: -1 })
+    .skip(startIndex)
+    .limit(limit)
     .select('mediaUrl mediaType createdAt author')
     .populate('author', 'username');
 
     res.status(200).json(mediaPosts);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    next(error);
   }
 };
 

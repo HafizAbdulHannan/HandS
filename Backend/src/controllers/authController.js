@@ -354,8 +354,11 @@ const deleteAccount = async (req, res) => {
     const { password, reason } = req.body;
     const user = req.user;
 
+    // Fetch user with password since req.user excludes it
+    const userWithPassword = await User.findById(user._id);
+
     // Validate password
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(password, userWithPassword.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Incorrect password' });
     }

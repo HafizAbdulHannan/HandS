@@ -27,6 +27,11 @@ export default function GalleryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  
   const [selectedImage, setSelectedImage] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -67,13 +72,35 @@ export default function GalleryScreen() {
     }
   };
 
-  const fetchGallery = async () => {
+  const fetchGallery = async (pageNum = 1, shouldAppend = false) => {
     try {
-      const response = await axiosInstance.get('/posts/gallery');
-      setImages(response.data);
+      const limit = 15;
+      const response = await axiosInstance.get(`/posts/gallery?page=${pageNum}&limit=${limit}`);
+      const newImages = response.data;
+      
+      if (shouldAppend) {
+        setImages(prev => [...prev, ...newImages]);
+      } else {
+        setImages(newImages);
+      }
+      
+      if (newImages.length < limit) {
+        setHasMore(false);
+      } else {
+        setHasMore(true);
+      }
     } catch (error) {
       console.log('Error fetching gallery:', error);
     }
+  };
+
+  const loadMore = async () => {
+    if (!hasMore || isLoadingMore || refreshing) return;
+    setIsLoadingMore(true);
+    const nextPage = page + 1;
+    await fetchGallery(nextPage, true);
+    setPage(nextPage);
+    setIsLoadingMore(false);
   };
 
   useEffect(() => {
@@ -82,7 +109,8 @@ export default function GalleryScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchGallery();
+    setPage(1);
+    await fetchGallery(1, false);
     setRefreshing(false);
   };
 
@@ -194,12 +222,17 @@ export default function GalleryScreen() {
         showsVerticalScrollIndicator={false}
         columnWrapperStyle={styles.columnWrapper}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={isLoadingMore ? <ActivityIndicator size="large" color="#ff6b81" style={{ marginVertical: 20 }} /> : null}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="images-outline" size={60} color="#ccc" />
-            <Text style={styles.emptyText}>No memories yet</Text>
-            <Text style={styles.emptySubText}>Upload your first picture!</Text>
-          </View>
+          !refreshing && (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="images-outline" size={60} color="#ccc" />
+              <Text style={styles.emptyText}>No memories yet</Text>
+              <Text style={styles.emptySubText}>Upload your first picture!</Text>
+            </View>
+          )
         }
         renderItem={({ item }) => (
           <TouchableOpacity 

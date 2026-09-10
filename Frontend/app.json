@@ -45,7 +45,8 @@
       "@react-native-community/datetimepicker",
       "expo-audio",
       "expo-asset",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-location"
     ],
     "extra": {
       "eas": {

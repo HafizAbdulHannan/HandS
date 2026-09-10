@@ -18,6 +18,7 @@ const userSchema = new mongoose.Schema(
       unique: true,
       trim: true,
       lowercase: true,
+      index: true,
     },
     phoneNumber: {
       type: String,
@@ -39,6 +40,7 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null, // Critical: 1-on-1 link to partner
+      index: true,
     },
     location: {
       lat: { type: Number },

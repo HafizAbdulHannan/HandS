@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { Platform } from 'react-native';
+import { Platform, DeviceEventEmitter } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -90,6 +90,14 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     loadUser();
+
+    const logoutListener = DeviceEventEmitter.addListener('force_logout', () => {
+      logout();
+    });
+
+    return () => {
+      logoutListener.remove();
+    };
   }, []);
 
   const login = async (email, password) => {

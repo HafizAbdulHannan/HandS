@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, TextInput, ActivityIndicator, Platform, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, TextInput, ActivityIndicator, Platform, Alert, Modal, KeyboardAvoidingView } from 'react-native';
 import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -80,7 +80,7 @@ export default function HomeScreen({ route }) {
 
   const fetchPosts = async () => {
     try {
-      const response = await axiosInstance.get('/posts');
+      const response = await axiosInstance.get('/posts?date=today');
       setPosts(response.data);
     } catch (error) {
       console.log('Error fetching posts:', error);
@@ -320,19 +320,10 @@ export default function HomeScreen({ route }) {
     }
   };
 
-  const isToday = (dateString) => {
-    if (!dateString) return false;
-    const date = new Date(dateString);
-    const today = new Date();
-    return date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear();
-  };
-
   const filteredPosts = posts.filter(post => {
     const matchesSearch = post.content?.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           post.author?.username?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch && isToday(post.createdAt);
+    return matchesSearch;
   });
 
   const headerComponent = (
@@ -409,6 +400,11 @@ export default function HomeScreen({ route }) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
       {animationType === 'miss_you' && <FloatingEmojis emoji="🥺" text="Miss You" />}
       {animationType === 'love_you' && <FloatingEmojis emoji="😘" text="Love You" />}
 
@@ -642,6 +638,7 @@ export default function HomeScreen({ route }) {
           </View>
         </TouchableOpacity>
       </Modal>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
