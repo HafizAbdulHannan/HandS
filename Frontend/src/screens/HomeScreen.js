@@ -69,21 +69,7 @@ export default function HomeScreen({ route }) {
     }
   }, [route?.params?.highlightPostId, posts]);
 
-  const sendLoveYou = () => {
-    if (socket && user?.partner) {
-      const room = [user._id, user.partner].sort().join('_');
-      socket.emit('trigger_animation', { room, animation: 'loveyou' });
-      socket.emit('send_notification', { room, partnerId: user.partner, title: 'Your partner loves you!', message: '😘' });
-    }
-  };
 
-  const sendMissYou = () => {
-    if (socket && user?.partner) {
-      const room = [user._id, user.partner].sort().join('_');
-      socket.emit('trigger_animation', { room, animation: 'missyou' });
-      socket.emit('send_notification', { room, partnerId: user.partner, title: 'Your partner misses you!', message: '🥺' });
-    }
-  };
 
   const sendHeartbeat = () => {
     if (socket && user?.partner) {
