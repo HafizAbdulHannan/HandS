@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Image, Platform, SafeAreaView } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { Audio } from 'expo-av';
+import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
@@ -18,11 +20,19 @@ export default function ConversationScreen() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
+  const [recording, setRecording] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [sound, setSound] = useState(null);
   const flatListRef = useRef();
 
   useEffect(() => {
     fetchMessages();
-  }, []);
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [sound]);
 
   useEffect(() => {
     if (!socket) return;
@@ -51,14 +61,15 @@ export default function ConversationScreen() {
     }
   };
 
-  const sendMessage = async () => {
-    if (inputText.trim() === '') return;
+  const sendMessage = async (overrideData = null) => {
+    if (!overrideData && inputText.trim() === '') return;
     
-    const textToSend = inputText;
-    setInputText(''); // optimistic clear
+    const textToSend = overrideData ? '' : inputText;
+    if (!overrideData) setInputText(''); // optimistic clear
     
     try {
-      const response = await axiosInstance.post('/messages', { text: textToSend });
+      const payload = overrideData || { text: textToSend };
+      const response = await axiosInstance.post('/messages', payload);
       const newMessage = response.data;
       
       setMessages((prev) => [...prev, newMessage]);
@@ -72,7 +83,60 @@ export default function ConversationScreen() {
     } catch (error) {
       console.log('Error sending message:', error);
       Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to send message' });
-      setInputText(textToSend); // revert on failure
+      if (!overrideData) setInputText(textToSend); // revert on failure
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      await Audio.requestPermissionsAsync();
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      setRecording(recording);
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Failed to start recording', err);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recording) return;
+    setIsRecording(false);
+    await recording.stopAndUnloadAsync();
+    const uri = recording.getURI();
+    setRecording(null);
+
+    // Upload audio
+    if (uri) {
+      const formData = new FormData();
+      formData.append('media', {
+        uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+        name: 'voicenote.m4a',
+        type: 'audio/m4a'
+      });
+      try {
+        const uploadRes = await axiosInstance.post('/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        await sendMessage({ audioUrl: uploadRes.data });
+      } catch (err) {
+        console.error('Failed to upload audio', err);
+        Toast.show({ type: 'error', text1: 'Upload Failed', text2: 'Could not send voice note.' });
+      }
+    }
+  };
+
+  const playAudio = async (url) => {
+    if (sound) await sound.unloadAsync();
+    try {
+      const { sound: newSound } = await Audio.Sound.createAsync({ uri: `${STATIC_URL}${url}` });
+      setSound(newSound);
+      await newSound.playAsync();
+    } catch (err) {
+      console.error('Error playing audio', err);
     }
   };
 
@@ -94,9 +158,9 @@ export default function ConversationScreen() {
         </View>
       </View>
 
-      <KeyboardAvoidingView 
+      <KeyboardAwareScrollView 
+        contentContainerStyle={{ flexGrow: 1 }}
         style={styles.keyboardView} 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {loading ? (
           <View style={styles.centerContainer}>
@@ -122,9 +186,20 @@ export default function ConversationScreen() {
               return (
                 <View style={[styles.messageBubbleWrapper, isMe ? styles.messageBubbleWrapperRight : styles.messageBubbleWrapperLeft]}>
                   <View style={[styles.messageBubble, isMe ? styles.messageBubbleMe : styles.messageBubblePartner]}>
-                    <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextPartner]}>
-                      {item.text}
-                    </Text>
+                    {item.audioUrl ? (
+                      <TouchableOpacity style={styles.audioBubble} onPress={() => playAudio(item.audioUrl)}>
+                        <Ionicons name="play-circle" size={24} color={isMe ? "#fff" : "#ff6b81"} />
+                        <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextPartner, { marginLeft: 8 }]}>
+                          Voice Note
+                        </Text>
+                      </TouchableOpacity>
+                    ) : item.mediaUrl ? (
+                      <Image source={{ uri: `${STATIC_URL}${item.mediaUrl}` }} style={{ width: 200, height: 200, borderRadius: 10 }} />
+                    ) : (
+                      <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextPartner]}>
+                        {item.text}
+                      </Text>
+                    )}
                   </View>
                   <Text style={styles.timeText}>{timeString}</Text>
                 </View>
@@ -136,22 +211,33 @@ export default function ConversationScreen() {
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.textInput}
-            placeholder="Type a message..."
+            placeholder={isRecording ? "Recording..." : "Type a message..."}
             placeholderTextColor="#aaa"
             value={inputText}
             onChangeText={setInputText}
             multiline
+            editable={!isRecording}
           />
-          <TouchableOpacity 
-            style={[styles.sendButton, inputText.trim() === '' && styles.sendButtonDisabled]} 
-            onPress={sendMessage}
-            activeOpacity={0.8}
-            disabled={inputText.trim() === ''}
-          >
-            <Ionicons name="send" size={20} color="#ffffff" />
-          </TouchableOpacity>
+          {inputText.trim() === '' ? (
+            <TouchableOpacity 
+              style={[styles.sendButton, isRecording && { backgroundColor: '#ff4757' }]} 
+              onPressIn={startRecording}
+              onPressOut={stopRecording}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="mic" size={20} color="#ffffff" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              style={styles.sendButton} 
+              onPress={() => sendMessage()}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="send" size={20} color="#ffffff" />
+            </TouchableOpacity>
+          )}
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }
@@ -233,6 +319,12 @@ const styles = StyleSheet.create({
   messageBubbleMe: {
     backgroundColor: '#ff6b81',
     borderBottomRightRadius: 4,
+  },
+  audioBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
   messageText: {
     fontSize: 16,

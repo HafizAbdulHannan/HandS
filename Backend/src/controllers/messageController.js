@@ -27,18 +27,20 @@ const getMessages = async (req, res) => {
 // @access  Private (Requires Pairing)
 const sendMessage = async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, audioUrl, mediaUrl } = req.body;
     const userId = req.user._id;
     const partnerId = req.user.partner;
 
-    if (!text) {
-      return res.status(400).json({ message: 'Message text is required' });
+    if (!text && !audioUrl && !mediaUrl) {
+      return res.status(400).json({ message: 'Message must contain text, audio, or media' });
     }
 
     const message = await Message.create({
       sender: userId,
       receiver: partnerId,
-      text,
+      text: text || '',
+      audioUrl: audioUrl || '',
+      mediaUrl: mediaUrl || '',
     });
 
     res.status(201).json(message);

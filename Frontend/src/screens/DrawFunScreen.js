@@ -1,13 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { 
   View, StyleSheet, TouchableOpacity, Text, 
-  PanResponder, Dimensions, Image, ActivityIndicator, TextInput 
+  PanResponder, Dimensions, Image, ActivityIndicator, TextInput, Platform 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeContext } from '../context/ThemeContext';
-import Svg, { Path, Rect, Circle } from 'react-native-svg';
+import Svg, { Path, Rect, Circle, Polygon } from 'react-native-svg';
 import ViewShot from 'react-native-view-shot';
 import * as ImagePicker from 'expo-image-picker';
 import axiosInstance from '../api/axiosConfig';
@@ -36,12 +36,17 @@ export default function DrawFunScreen() {
   const [redoElements, setRedoElements] = useState([]);
   
   const [showTools, setShowTools] = useState(false);
-  const [toolMode, setToolMode] = useState('draw'); // 'draw', 'color', 'stroke', 'sticker', 'shape', 'text'
+  const [toolMode, setToolMode] = useState('draw'); // 'draw', 'move', 'color', 'stroke', 'sticker', 'shape', 'text'
   const [isPosting, setIsPosting] = useState(false);
   const [textInput, setTextInput] = useState('');
 
+  const toolModeRef = useRef(toolMode);
+  React.useEffect(() => {
+    toolModeRef.current = toolMode;
+  }, [toolMode]);
+
   const handlePanResponderGrant = (evt) => {
-    if (toolMode !== 'draw') return;
+    if (toolModeRef.current !== 'draw' && toolModeRef.current !== 'eraser') return;
     const { locationX, locationY } = evt.nativeEvent;
     setCurrentPath({
       path: `M${locationX},${locationY}`,
@@ -51,7 +56,7 @@ export default function DrawFunScreen() {
   };
 
   const handlePanResponderMove = (evt) => {
-    if (toolMode !== 'draw' || !currentPath) return;
+    if ((toolModeRef.current !== 'draw' && toolModeRef.current !== 'eraser') || !currentPath) return;
     const { locationX, locationY } = evt.nativeEvent;
     setCurrentPath((prev) => ({
       ...prev,
@@ -69,8 +74,8 @@ export default function DrawFunScreen() {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => toolModeRef.current === 'draw' || toolModeRef.current === 'eraser',
+      onMoveShouldSetPanResponder: () => toolModeRef.current === 'draw' || toolModeRef.current === 'eraser',
       onPanResponderGrant: handlePanResponderGrant,
       onPanResponderMove: handlePanResponderMove,
       onPanResponderRelease: handlePanResponderRelease,
@@ -93,7 +98,7 @@ export default function DrawFunScreen() {
     setPlacedElements([...placedElements, { type: 'sticker', content: sticker, x: width/2 - 20, y: height/3 }]);
     setRedoElements([]);
     setShowTools(false);
-    setToolMode('draw');
+    setToolMode('move');
   };
 
   const addText = () => {
@@ -102,7 +107,7 @@ export default function DrawFunScreen() {
       setRedoElements([]);
       setTextInput('');
       setShowTools(false);
-      setToolMode('draw');
+      setToolMode('move');
     }
   };
 
@@ -110,7 +115,14 @@ export default function DrawFunScreen() {
     setPlacedElements([...placedElements, { type: 'shape', shape, color, x: width/2 - 50, y: height/3 }]);
     setRedoElements([]);
     setShowTools(false);
-    setToolMode('draw');
+    setToolMode('move');
+  };
+
+  const clearCanvas = () => {
+    setPaths([]);
+    setPlacedElements([]);
+    setBgImage(null);
+    Toast.show({ type: 'success', text1: 'Canvas Cleared' });
   };
 
   const undo = () => {
@@ -145,11 +157,22 @@ export default function DrawFunScreen() {
 
     setIsPosting(true);
     try {
-      const dataUri = await viewShotRef.current.capture();
-      
+      const uri = await viewShotRef.current.capture();
+      const formData = new FormData();
+      formData.append('media', {
+        uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+        name: 'drawing.jpg',
+        type: 'image/jpeg'
+      });
+
+      const uploadRes = await axiosInstance.post('/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const finalUrl = uploadRes.data;
+
       await axiosInstance.post('/posts', {
         content: 'Check out my drawing! 🎨',
-        mediaUrl: dataUri,
+        mediaUrl: finalUrl,
         mediaType: 'drawing'
       });
 
@@ -177,11 +200,11 @@ export default function DrawFunScreen() {
 
       {/* Canvas */}
       <View style={styles.canvasContainer}>
-        <ViewShot ref={viewShotRef} style={styles.viewShot} options={{ format: 'jpg', quality: 0.5, result: 'data-uri' }}>
+        <ViewShot ref={viewShotRef} style={styles.viewShot} options={{ format: 'jpg', quality: 0.8, result: 'tmpfile' }}>
           <View style={styles.canvasBackground} {...panResponder.panHandlers}>
             {bgImage && <Image source={{ uri: bgImage }} style={StyleSheet.absoluteFill} resizeMode="cover" />}
             
-            <Svg style={StyleSheet.absoluteFill}>
+            <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
               {paths.map((p, i) => (
                 <Path key={i} d={p.path} stroke={p.color} strokeWidth={p.strokeWidth} strokeLinecap="round" strokeLinejoin="round" fill="none" />
               ))}
@@ -211,6 +234,9 @@ export default function DrawFunScreen() {
                     <Svg height="100" width="100">
                       {el.shape === 'rect' && <Rect width="100" height="100" fill={el.color} />}
                       {el.shape === 'circle' && <Circle cx="50" cy="50" r="50" fill={el.color} />}
+                      {el.shape === 'triangle' && <Polygon points="50,0 100,100 0,100" fill={el.color} />}
+                      {el.shape === 'star' && <Polygon points="50,0 60,35 100,35 70,60 80,100 50,75 20,100 30,60 0,35 40,35" fill={el.color} />}
+                      {el.shape === 'heart' && <Path d="M50,90 L42,82 C14,56 0,42 0,25 C0,11 11,0 25,0 C33,0 40,4 45,10 C50,4 57,0 65,0 C79,0 90,11 90,25 C90,42 76,56 48,82 L50,90 Z" fill={el.color} transform="translate(5, 5)" />}
                     </Svg>
                   </DraggableItem>
                 );
@@ -226,7 +252,10 @@ export default function DrawFunScreen() {
         <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('color'); setShowTools(true); }}>
           <View style={[styles.colorPreview, { backgroundColor: color }]} />
         </TouchableOpacity>
-        
+        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('move'); setShowTools(false); Toast.show({ type: 'info', text1: 'Move Mode', text2: 'Drag, pinch, and rotate elements' }); }}>
+          <Ionicons name="hand-right-outline" size={24} color={toolMode === 'move' ? theme.colors.primary : theme.colors.text} />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('stroke'); setShowTools(true); }}>
           <Ionicons name="pencil" size={24} color={toolMode === 'draw' ? theme.colors.primary : theme.colors.text} />
         </TouchableOpacity>
@@ -242,14 +271,17 @@ export default function DrawFunScreen() {
         <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('shape'); setShowTools(true); }}>
           <Ionicons name="shapes-outline" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        
         <TouchableOpacity style={styles.toolBtn} onPress={() => {
           setColor('#ffffff');
           setStrokeWidth(20);
-          setToolMode('draw');
+          setToolMode('eraser');
           Toast.show({ type: 'info', text1: 'Eraser active', text2: 'Draw to erase (white color)' });
         }}>
-          <Ionicons name="scan-outline" size={24} color={theme.colors.text} />
+          <Ionicons name="scan-outline" size={24} color={toolMode === 'eraser' ? theme.colors.primary : theme.colors.text} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.toolBtn} onPress={clearCanvas}>
+          <Ionicons name="trash-outline" size={24} color={theme.colors.text} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.toolBtn} onPress={pickImage}>
@@ -320,6 +352,15 @@ export default function DrawFunScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => addShape('circle')} style={styles.shapeBtn}>
                   <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: color }} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => addShape('triangle')} style={styles.shapeBtn}>
+                  <Svg height="40" width="40"><Polygon points="20,0 40,40 0,40" fill={color} /></Svg>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => addShape('star')} style={styles.shapeBtn}>
+                  <Svg height="40" width="40"><Polygon points="20,0 24,14 40,14 28,24 32,40 20,30 8,40 12,24 0,14 16,14" fill={color} /></Svg>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => addShape('heart')} style={styles.shapeBtn}>
+                  <Svg height="40" width="40"><Path d="M20,36 L17,33 C6,22 0,17 0,10 C0,4 4,0 10,0 C13,0 16,2 18,4 C20,2 23,0 26,0 C32,0 36,4 36,10 C36,17 30,22 19,33 L20,36 Z" fill={color} transform="translate(2, 2)" /></Svg>
                 </TouchableOpacity>
               </>
             )}

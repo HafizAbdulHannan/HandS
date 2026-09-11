@@ -4,6 +4,7 @@ import { Vibration } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { useAuth } from './AuthContext';
+import axiosInstance from '../api/axiosConfig';
 
 const SocketContext = createContext();
 
@@ -55,13 +56,23 @@ export const SocketProvider = ({ children }) => {
       Toast.show({ type: 'info', text1: title, text2: message, position: 'top' });
     });
 
+    // Check for pending animation on load
+    if (user?.pendingAnimation) {
+      if (user.pendingAnimation === 'love_you' || user.pendingAnimation === 'miss_you') {
+        setAnimationType(user.pendingAnimation);
+        setTimeout(() => setAnimationType(null), 5000);
+        // Clear it on backend
+        axiosInstance.post('/auth/clear-animation').catch(e => console.log('Error clearing animation', e));
+      }
+    }
+
     return () => newSocket.close();
-  }, [userId, partnerId]);
+  }, [userId, partnerId, user?.pendingAnimation]);
 
   const sendMissYou = () => {
     if (socket && userId && partnerId) {
       const room = [userId, partnerId].sort().join('_');
-      socket.emit('send_miss_you', { room, partnerId });
+      socket.emit('send_miss_you', { room, partnerId, senderId: userId, senderName: user?.fullName || user?.username });
 
       // Visual feedback for sender
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -74,7 +85,7 @@ export const SocketProvider = ({ children }) => {
   const sendLoveYou = () => {
     if (socket && userId && partnerId) {
       const room = [userId, partnerId].sort().join('_');
-      socket.emit('send_love_you', { room, partnerId });
+      socket.emit('send_love_you', { room, partnerId, senderId: userId, senderName: user?.fullName || user?.username });
 
       // Visual feedback for sender
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);

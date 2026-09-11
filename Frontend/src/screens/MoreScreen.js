@@ -40,6 +40,22 @@ export default function MoreScreen() {
             <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
           </TouchableOpacity>
         </Animated.View>
+
+        <Animated.View entering={FadeInUp.delay(400)}>
+          <TouchableOpacity style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} onPress={() => navigation.navigate('MoodTracker')}>
+            <Ionicons name="happy-outline" size={24} color={theme.colors.text} style={styles.icon} />
+            <Text style={[styles.menuText, { color: theme.colors.text }]}>Mood Tracker</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+        </Animated.View>
+
+        <Animated.View entering={FadeInUp.delay(500)}>
+          <TouchableOpacity style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} onPress={() => navigation.navigate('SharedList')}>
+            <Ionicons name="list-outline" size={24} color={theme.colors.text} style={styles.icon} />
+            <Text style={[styles.menuText, { color: theme.colors.text }]}>Collaborative List</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+        </Animated.View>
       </View>
     </SafeAreaView>
   );

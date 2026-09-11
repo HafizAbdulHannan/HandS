@@ -13,7 +13,15 @@ const messageSchema = new mongoose.Schema({
   },
   text: {
     type: String,
-    required: true,
+    default: '',
+  },
+  audioUrl: {
+    type: String,
+    default: '',
+  },
+  mediaUrl: {
+    type: String,
+    default: '',
   },
 }, {
   timestamps: true,

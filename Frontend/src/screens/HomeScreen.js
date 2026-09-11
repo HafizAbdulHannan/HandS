@@ -37,6 +37,14 @@ export default function HomeScreen({ route }) {
   const [selectedMediaType, setSelectedMediaType] = useState('none');
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [partner, setPartner] = useState(null);
+  const [partnerData, setPartnerData] = useState(null);
+  
+  const [dailyQuestion, setDailyQuestion] = useState(null);
+  const [myAnswerInput, setMyAnswerInput] = useState('');
+  const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
+
+  const [sharedPet, setSharedPet] = useState(null);
+
   const [activeCommentPostId, setActiveCommentPostId] = useState(null);
   const [commentText, setCommentText] = useState('');
   const [isCommenting, setIsCommenting] = useState(false);
@@ -61,16 +69,41 @@ export default function HomeScreen({ route }) {
     }
   }, [route?.params?.highlightPostId, posts]);
 
+  const sendLoveYou = () => {
+    if (socket && user?.partner) {
+      const room = [user._id, user.partner].sort().join('_');
+      socket.emit('trigger_animation', { room, animation: 'loveyou' });
+      socket.emit('send_notification', { room, partnerId: user.partner, title: 'Your partner loves you!', message: '😘' });
+    }
+  };
+
+  const sendMissYou = () => {
+    if (socket && user?.partner) {
+      const room = [user._id, user.partner].sort().join('_');
+      socket.emit('trigger_animation', { room, animation: 'missyou' });
+      socket.emit('send_notification', { room, partnerId: user.partner, title: 'Your partner misses you!', message: '🥺' });
+    }
+  };
+
+  const sendHeartbeat = () => {
+    if (socket && user?.partner) {
+      const room = [user._id, user.partner].sort().join('_');
+      socket.emit('send_heartbeat', { room });
+    }
+  };
+
   const fetchPartner = async () => {
     if (user?.partner) {
       try {
         const response = await axiosInstance.get('/pairing/partner');
         setPartner(response.data);
+        setPartnerData(response.data);
       } catch (error) {
         console.log('Error fetching partner:', error);
       }
     } else {
       setPartner(null);
+      setPartnerData(null);
     }
   };
 
@@ -87,15 +120,39 @@ export default function HomeScreen({ route }) {
     }
   };
 
+  const fetchDailyQuestion = async () => {
+    try {
+      const res = await axiosInstance.get('/questions/today');
+      setDailyQuestion(res.data);
+    } catch (error) {
+      console.log('Error fetching daily question:', error);
+    }
+  };
+
+  const fetchSharedPet = async () => {
+    try {
+      const res = await axiosInstance.get('/pets');
+      setSharedPet(res.data);
+    } catch (error) {
+      console.log('Error fetching shared pet:', error);
+    }
+  };
+
   useEffect(() => {
     fetchPosts();
-  }, []);
+    if (user?.partner) {
+      fetchDailyQuestion();
+      fetchSharedPet();
+    }
+  }, [user?.partner]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchPosts();
     if (user?.partner) {
       await fetchPartner();
+      await fetchDailyQuestion();
+      await fetchSharedPet();
     }
     setRefreshing(false);
   };
@@ -151,6 +208,32 @@ export default function HomeScreen({ route }) {
   const openPostOptions = (post) => {
     setSelectedPostOptions(post);
     setOptionsModalVisible(true);
+  };
+
+  const handleAnswerSubmit = async () => {
+    if (!myAnswerInput.trim()) return;
+    setIsSubmittingAnswer(true);
+    try {
+      await axiosInstance.post('/questions/answer', { questionId: dailyQuestion._id, answer: myAnswerInput });
+      await fetchDailyQuestion();
+      Toast.show({ type: 'success', text1: 'Answer submitted!' });
+    } catch (error) {
+      console.log('Error submitting answer', error);
+      Toast.show({ type: 'error', text1: 'Failed to submit' });
+    } finally {
+      setIsSubmittingAnswer(false);
+    }
+  };
+
+  const handlePetInteract = async (action) => {
+    try {
+      const res = await axiosInstance.post('/pets/interact', { action });
+      setSharedPet(res.data);
+      if (action === 'feed') Toast.show({ type: 'success', text1: 'Yum! Pet fed.' });
+      if (action === 'play') Toast.show({ type: 'success', text1: 'Pet is happy!' });
+    } catch (error) {
+      console.log('Error interacting with pet', error);
+    }
   };
 
   const handleEditInit = () => {
@@ -286,7 +369,7 @@ export default function HomeScreen({ route }) {
         } else {
           const formData = new FormData();
           formData.append('media', {
-            uri: selectedMedia.uri,
+            uri: Platform.OS === 'ios' ? selectedMedia.uri.replace('file://', '') : selectedMedia.uri,
             name: selectedMedia.name,
             type: selectedMedia.mimeType,
           });
@@ -332,6 +415,67 @@ export default function HomeScreen({ route }) {
         <View style={styles.noPartnerBanner}>
           <Ionicons name="information-circle" size={24} color="#ff6b81" />
           <Text style={styles.noPartnerText}>Connect with partner to see their feed.</Text>
+        </View>
+      )}
+
+      {user?.partner && dailyQuestion && (
+        <View style={[styles.dailyQuestionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View style={styles.dailyQuestionHeader}>
+            <Ionicons name="help-circle" size={24} color="#ff6b81" />
+            <Text style={[styles.dailyQuestionTitle, { color: theme.colors.text }]}>Daily Question</Text>
+          </View>
+          <Text style={[styles.dailyQuestionText, { color: theme.colors.text }]}>{dailyQuestion.question}</Text>
+          
+          {dailyQuestion.myAnswer ? (
+            <View style={styles.answersContainer}>
+              <View style={styles.answerBox}>
+                <Text style={styles.answerAuthor}>You</Text>
+                <Text style={[styles.answerText, { color: theme.colors.textSecondary }]}>{dailyQuestion.myAnswer}</Text>
+              </View>
+              <View style={[styles.answerBox, { marginTop: 10 }]}>
+                <Text style={styles.answerAuthor}>{partnerData?.username || 'Partner'}</Text>
+                <Text style={[styles.answerText, { color: theme.colors.textSecondary }]}>
+                  {dailyQuestion.partnerAnswer === 'HIDDEN' ? 'Has not answered yet...' : dailyQuestion.partnerAnswer || 'Has not answered yet...'}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.answerInputContainer}>
+              <TextInput
+                style={[styles.answerInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
+                placeholder="Type your answer to unlock partner's answer..."
+                placeholderTextColor={theme.colors.textSecondary}
+                value={myAnswerInput}
+                onChangeText={setMyAnswerInput}
+                multiline
+              />
+              <TouchableOpacity style={styles.answerSubmitBtn} onPress={handleAnswerSubmit} disabled={isSubmittingAnswer}>
+                {isSubmittingAnswer ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.answerSubmitText}>Submit</Text>}
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
+
+      {user?.partner && sharedPet && (
+        <View style={[styles.petCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View style={styles.petHeader}>
+            <Text style={styles.petEmoji}>{sharedPet.type === 'dog' ? '🐶' : sharedPet.type === 'cat' ? '🐱' : '🪴'}</Text>
+            <View style={styles.petInfo}>
+              <Text style={[styles.petName, { color: theme.colors.text }]}>{sharedPet.name} <Text style={styles.petLevel}>Lvl {sharedPet.level}</Text></Text>
+              <View style={styles.healthBarContainer}>
+                <View style={[styles.healthBar, { width: `${sharedPet.health}%`, backgroundColor: sharedPet.health > 50 ? '#4CD964' : '#FF3B30' }]} />
+              </View>
+            </View>
+          </View>
+          <View style={styles.petActions}>
+            <TouchableOpacity style={styles.petBtn} onPress={() => handlePetInteract('feed')}>
+              <Text style={styles.petBtnText}>Feed 🥩</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.petBtn} onPress={() => handlePetInteract('play')}>
+              <Text style={styles.petBtnText}>Play 🎾</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
       
@@ -606,6 +750,15 @@ export default function HomeScreen({ route }) {
               <Text style={styles.miniFabIcon}>🥺</Text>
               <Text style={styles.miniFabText}>Miss You</Text>
             </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.miniFab} 
+              activeOpacity={0.8} 
+              onPressIn={sendHeartbeat}
+              onPressOut={() => setIsFabMenuOpen(false)}
+            >
+              <Text style={styles.miniFabIcon}>💓</Text>
+              <Text style={styles.miniFabText}>Heartbeat</Text>
+            </TouchableOpacity>
           </View>
         )}
         <TouchableOpacity style={styles.mainFab} activeOpacity={0.8} onPress={() => setIsFabMenuOpen(!isFabMenuOpen)}>
@@ -735,7 +888,125 @@ const styles = StyleSheet.create({
   },
   editPostContainer: {
     marginTop: 10,
+    marginBottom: 20,
+  },
+  dailyQuestionCard: {
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  dailyQuestionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 10,
+  },
+  dailyQuestionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  dailyQuestionText: {
+    fontSize: 16,
+    marginBottom: 15,
+  },
+  answerInputContainer: {
+    marginTop: 5,
+  },
+  answerInput: {
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 60,
+    textAlignVertical: 'top',
+    marginBottom: 10,
+  },
+  answerSubmitBtn: {
+    backgroundColor: '#ff6b81',
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  answerSubmitText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  answersContainer: {
+    marginTop: 10,
+  },
+  answerBox: {
+    backgroundColor: '#f1f3f5',
+    padding: 12,
+    borderRadius: 12,
+  },
+  answerAuthor: {
+    fontWeight: 'bold',
+    fontSize: 12,
+    color: '#ff6b81',
+    marginBottom: 4,
+  },
+  answerText: {
+    fontSize: 14,
+  },
+  petCard: {
+    borderRadius: 20,
+    padding: 15,
+    marginBottom: 20,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  petHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  petEmoji: {
+    fontSize: 40,
+    marginRight: 15,
+  },
+  petInfo: {
+    flex: 1,
+  },
+  petName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  petLevel: {
+    fontSize: 14,
+    color: '#ff6b81',
+  },
+  healthBarContainer: {
+    height: 8,
+    backgroundColor: '#f1f3f5',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  healthBar: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  petActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  petBtn: {
+    backgroundColor: '#fff0f3',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#ff6b81',
+  },
+  petBtnText: {
+    color: '#ff6b81',
+    fontWeight: 'bold',
   },
   editPostInput: {
     borderRadius: 12,

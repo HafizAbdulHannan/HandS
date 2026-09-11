@@ -8,6 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import * as Haptics from 'expo-haptics';
 
 // Import Screens
 import SplashScreen from '../screens/SplashScreen';
@@ -37,6 +38,8 @@ import WatchLobbyScreen from '../screens/WatchLobbyScreen';
 import WatchRoomScreen from '../screens/WatchRoomScreen';
 import DrawFunScreen from '../screens/DrawFunScreen';
 import DrawFunReplyScreen from '../screens/DrawFunReplyScreen';
+import MoodTrackerScreen from '../screens/MoodTrackerScreen';
+import SharedListScreen from '../screens/SharedListScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -94,9 +97,16 @@ function MainTabs() {
       };
       socket.on('receive_watch_invite', handleWatchInvite);
 
+      const handleHeartbeat = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 200);
+      };
+      socket.on('receive_heartbeat', handleHeartbeat);
+
       return () => {
         socket.off('receive_notification', handleNewNotification);
         socket.off('receive_watch_invite', handleWatchInvite);
+        socket.off('receive_heartbeat', handleHeartbeat);
       };
     }
   }, [socket, user, navigation]);
@@ -187,6 +197,8 @@ export default function AppNavigator() {
           <Stack.Screen name="WatchRoom" component={WatchRoomScreen} />
           <Stack.Screen name="DrawFun" component={DrawFunScreen} />
           <Stack.Screen name="DrawFunReply" component={DrawFunReplyScreen} />
+          <Stack.Screen name="MoodTracker" component={MoodTrackerScreen} />
+          <Stack.Screen name="SharedList" component={SharedListScreen} />
           <Stack.Screen name="About" component={AboutScreen} />
           <Stack.Screen name="Policy" component={PolicyScreen} />
         </>

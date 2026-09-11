@@ -48,6 +48,7 @@ app.use(xss());
 
 const { sendPushNotification } = require('./utils/pushNotification');
 const User = require('./models/User');
+const Notification = require('./models/Notification');
 
 const userSocketMap = new Map();
 
@@ -61,6 +62,10 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const dateEventRoutes = require('./routes/dateEventRoutes');
 const watchRoutes = require('./routes/watchRoutes');
 const websiteRoutes = require('./routes/websiteRoutes');
+const moodRoutes = require('./routes/moodRoutes');
+const questionRoutes = require('./routes/questionRoutes');
+const listRoutes = require('./routes/listRoutes');
+const petRoutes = require('./routes/petRoutes'); // NEW
 
 app.use('/api/auth', authRoutes);
 app.use('/api/pairing', pairingRoutes);
@@ -71,6 +76,10 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/dates', dateEventRoutes);
 app.use('/api/watch', watchRoutes);
 app.use('/api/website', websiteRoutes);
+app.use('/api/moods', moodRoutes);
+app.use('/api/questions', questionRoutes);
+app.use('/api/lists', listRoutes);
+app.use('/api/pets', petRoutes);
 
 // Static folder setup for uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -97,25 +106,59 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('send_miss_you', async ({ room, partnerId }) => {
+  socket.on('send_miss_you', async ({ room, partnerId, senderId, senderName }) => {
     socket.to(room).emit('receive_miss_you', { timestamp: new Date() });
     if (partnerId) {
       try {
         const partner = await User.findById(partnerId);
-        if (partner && partner.pushToken) {
-          await sendPushNotification(partner.pushToken, 'Miss You! ❤️', 'Your partner misses you!');
+        if (partner) {
+          // Save pending animation
+          partner.pendingAnimation = 'miss_you';
+          await partner.save();
+
+          // Create notification in DB
+          if (senderId) {
+            await Notification.create({
+              recipient: partnerId,
+              sender: senderId,
+              title: `${senderName || 'Your partner'} Misses you`,
+              message: 'Your partner misses you!',
+              type: 'other'
+            });
+          }
+
+          if (partner.pushToken) {
+            await sendPushNotification(partner.pushToken, 'You have a new Notification', 'Your partner misses you!');
+          }
         }
       } catch (e) { console.error(e); }
     }
   });
 
-  socket.on('send_love_you', async ({ room, partnerId }) => {
+  socket.on('send_love_you', async ({ room, partnerId, senderId, senderName }) => {
     socket.to(room).emit('receive_love_you', { timestamp: new Date() });
     if (partnerId) {
       try {
         const partner = await User.findById(partnerId);
-        if (partner && partner.pushToken) {
-          await sendPushNotification(partner.pushToken, 'Love You! 😘', 'Your partner loves you!');
+        if (partner) {
+          // Save pending animation
+          partner.pendingAnimation = 'love_you';
+          await partner.save();
+
+          // Create notification in DB
+          if (senderId) {
+            await Notification.create({
+              recipient: partnerId,
+              sender: senderId,
+              title: `${senderName || 'Your partner'} Loves you`,
+              message: 'Your partner loves you!',
+              type: 'other'
+            });
+          }
+
+          if (partner.pushToken) {
+            await sendPushNotification(partner.pushToken, 'You have a new Notification', 'Your partner loves you!');
+          }
         }
       } catch (e) { console.error(e); }
     }
@@ -139,6 +182,10 @@ io.on('connection', (socket) => {
 
   socket.on('send_message', ({ room, message }) => {
     socket.to(room).emit('receive_message', message);
+  });
+
+  socket.on('send_heartbeat', ({ room }) => {
+    socket.to(room).emit('receive_heartbeat');
   });
 
   // --- WATCH TOGETHER SOCKET EVENTS ---

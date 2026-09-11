@@ -340,9 +340,8 @@ const WatchRoomScreen = () => {
     if (!isHost) return;
     try {
       let result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'videos',
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
         allowsEditing: false,
-        quality: 1,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -351,9 +350,9 @@ const WatchRoomScreen = () => {
 
         const formData = new FormData();
         formData.append('media', {
-          uri: videoAsset.uri,
+          uri: Platform.OS === 'ios' ? videoAsset.uri.replace('file://', '') : videoAsset.uri,
           name: videoAsset.fileName || 'upload.mp4',
-          type: 'video/mp4'
+          type: videoAsset.mimeType || 'video/mp4'
         });
 
         const res = await axiosInstance.post('/upload', formData, {
@@ -397,6 +396,12 @@ const WatchRoomScreen = () => {
     try {
       if (isScreenSharing) {
         await agoraEngineRef.current?.stopScreenCapture();
+        await agoraEngineRef.current?.updateChannelMediaOptions({
+          publishScreenCaptureVideo: false,
+          publishCameraTrack: isVideoOn,
+          publishScreenCaptureAudio: false,
+          publishMicrophoneTrack: isMicOn,
+        });
         setIsScreenSharing(false);
         setMediaType('none');
         if (socket) {
@@ -411,6 +416,12 @@ const WatchRoomScreen = () => {
             frameRate: 15,
             bitrate: 1000,
           }
+        });
+        await agoraEngineRef.current?.updateChannelMediaOptions({
+          publishScreenCaptureVideo: true,
+          publishCameraTrack: false,
+          publishScreenCaptureAudio: true,
+          publishMicrophoneTrack: isMicOn,
         });
         setIsScreenSharing(true);
         setMediaType('screen_share');
@@ -544,6 +555,12 @@ const WatchRoomScreen = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
+      {!roomData && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 999, justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={{ color: '#fff', marginTop: 10 }}>Entering Room...</Text>
+        </View>
+      )}
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
         <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
@@ -726,10 +743,16 @@ const WatchRoomScreen = () => {
           </View>
         )}
 
-        <Text style={[styles.sectionTitle, { color: theme.colors.text, marginTop: 15 }]}>Participants</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15, marginBottom: 10 }}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.text, marginTop: 0, marginBottom: 0 }]}>Participants</Text>
+          <TouchableOpacity onPress={onRefresh} style={{ padding: 5 }}>
+            <Ionicons name="refresh" size={24} color={theme.colors.primary} />
+          </TouchableOpacity>
+        </View>
 
         <ScrollView 
-          style={styles.participantsList} 
+          style={styles.participantsList}
+          contentContainerStyle={{ paddingBottom: 80 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
@@ -1068,7 +1091,7 @@ const styles = StyleSheet.create({
   },
   videoCallContainer: {
     width: '100%',
-    aspectRatio: 1,
+    aspectRatio: 16 / 9,
     borderRadius: 15,
     overflow: 'hidden',
     marginBottom: 10,

@@ -87,7 +87,7 @@ export default function DatesToRememberScreen() {
       if (selectedAudio) {
         const formData = new FormData();
         formData.append('media', {
-          uri: selectedAudio.uri,
+          uri: Platform.OS === 'ios' ? selectedAudio.uri.replace('file://', '') : selectedAudio.uri,
           name: selectedAudio.name,
           type: selectedAudio.type,
         });

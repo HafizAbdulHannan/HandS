@@ -61,6 +61,11 @@ const userSchema = new mongoose.Schema(
     resetPasswordExpire: {
       type: Date,
     },
+    pendingAnimation: {
+      type: String,
+      enum: ['love_you', 'miss_you', null],
+      default: null,
+    },
   },
   {
     timestamps: true,

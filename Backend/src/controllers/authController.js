@@ -389,6 +389,23 @@ const deleteAccount = async (req, res) => {
   }
 };
 
+// @desc    Clear pending animation
+// @route   POST /api/auth/clear-animation
+// @access  Private
+const clearPendingAnimation = async (req, res) => {
+  try {
+    const user = req.user;
+    if (user.pendingAnimation) {
+      user.pendingAnimation = null;
+      await user.save();
+    }
+    res.status(200).json({ message: 'Pending animation cleared' });
+  } catch (error) {
+    console.error('Clear pending animation error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
@@ -401,4 +418,5 @@ module.exports = {
   updateLocation,
   downloadData,
   deleteAccount,
+  clearPendingAnimation,
 };
