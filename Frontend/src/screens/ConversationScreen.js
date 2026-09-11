@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, ActivityIndicator, Image, Platform, SafeAreaView } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, ActivityIndicator, Image, Platform, SafeAreaView } from 'react-native';
 import { Audio } from 'expo-av';
 import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -158,9 +157,10 @@ export default function ConversationScreen() {
         </View>
       </View>
 
-      <KeyboardAwareScrollView 
-        contentContainerStyle={{ flexGrow: 1 }}
+      <KeyboardAvoidingView 
         style={styles.keyboardView} 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         {loading ? (
           <View style={styles.centerContainer}>
@@ -237,7 +237,7 @@ export default function ConversationScreen() {
             </TouchableOpacity>
           )}
         </View>
-      </KeyboardAwareScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

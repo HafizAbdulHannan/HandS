@@ -4,6 +4,7 @@ import {
   PanResponder, Dimensions, Image, ActivityIndicator, TextInput, Platform 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useThemeContext } from '../context/ThemeContext';
@@ -50,7 +51,7 @@ export default function DrawFunScreen() {
     const { locationX, locationY } = evt.nativeEvent;
     setCurrentPath({
       path: `M${locationX},${locationY}`,
-      color,
+      color: toolModeRef.current === 'eraser' ? theme.colors.background : color,
       strokeWidth
     });
   };
@@ -187,8 +188,9 @@ export default function DrawFunScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
-      {/* Header */}
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
+        {/* Header */}
       <View style={[styles.header, { zIndex: 10 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
           <Ionicons name="close" size={28} color="#fff" />
@@ -239,29 +241,6 @@ export default function DrawFunScreen() {
                       {el.shape === 'heart' && <Path d="M50,90 L42,82 C14,56 0,42 0,25 C0,11 11,0 25,0 C33,0 40,4 45,10 C50,4 57,0 65,0 C79,0 90,11 90,25 C90,42 76,56 48,82 L50,90 Z" fill={el.color} transform="translate(5, 5)" />}
                     </Svg>
                   </DraggableItem>
-                );
-              }
-              return null;
-            })}
-          </View>
-        </ViewShot>
-      </View>
-
-      {/* Toolbar */}
-      <View style={[styles.toolbar, { borderTopColor: theme.colors.border, backgroundColor: theme.colors.cardBg }]}>
-        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('color'); setShowTools(true); }}>
-          <View style={[styles.colorPreview, { backgroundColor: color }]} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('move'); setShowTools(false); Toast.show({ type: 'info', text1: 'Move Mode', text2: 'Drag, pinch, and rotate elements' }); }}>
-          <Ionicons name="hand-right-outline" size={24} color={toolMode === 'move' ? theme.colors.primary : theme.colors.text} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('stroke'); setShowTools(true); }}>
-          <Ionicons name="pencil" size={24} color={toolMode === 'draw' ? theme.colors.primary : theme.colors.text} />
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('sticker'); setShowTools(true); }}>
-          <Ionicons name="happy-outline" size={24} color={theme.colors.text} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('text'); setShowTools(true); }}>
@@ -367,7 +346,8 @@ export default function DrawFunScreen() {
           </View>
         </Animated.View>
       )}
-    </SafeAreaView>
+      </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }
 

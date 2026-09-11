@@ -27,9 +27,21 @@ const getMessages = async (req, res) => {
 // @access  Private (Requires Pairing)
 const sendMessage = async (req, res) => {
   try {
-    const { text, audioUrl, mediaUrl } = req.body;
+    const { text } = req.body;
+    let audioUrl = req.body.audioUrl || '';
+    let mediaUrl = req.body.mediaUrl || '';
     const userId = req.user._id;
     const partnerId = req.user.partner;
+
+    if (req.file) {
+      const filePath = `/uploads/${req.file.filename}`;
+      // Basic check: if the field name was media, check mimetype or assume it is what the client sent.
+      if (req.file.mimetype.startsWith('audio') || req.file.mimetype.includes('mp4') || req.body.type === 'audio') {
+        audioUrl = filePath;
+      } else {
+        mediaUrl = filePath;
+      }
+    }
 
     if (!text && !audioUrl && !mediaUrl) {
       return res.status(400).json({ message: 'Message must contain text, audio, or media' });

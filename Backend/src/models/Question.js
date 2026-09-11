@@ -1,21 +1,22 @@
 const mongoose = require('mongoose');
 
 const questionSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
   },
-  email: {
+  questionText: {
     type: String,
-    required: true
+    required: true,
   },
-  question: {
+  imageUrl: {
     type: String,
-    required: true
+    default: '',
   },
-  reply: {
+  devReply: {
     type: String,
-    default: null
+    default: '',
   }
 }, { timestamps: true });
 

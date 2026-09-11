@@ -160,6 +160,14 @@ export default function SettingScreen() {
 
           <TouchableOpacity 
             style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
+            onPress={() => navigation.navigate('AskQuestion')}
+          >
+            <Ionicons name="help-circle-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
+            <Text style={[styles.menuText, { color: theme.colors.text }]}>Ask a Question</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
             onPress={toggleTheme}
           >
             <Ionicons name={isDarkMode ? "sunny-outline" : "moon-outline"} size={22} color={theme.colors.icon} style={styles.menuIcon} />

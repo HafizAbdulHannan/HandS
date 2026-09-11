@@ -69,6 +69,19 @@ const WatchRoomScreen = () => {
   useEffect(() => {
     const setupAgora = async () => {
       try {
+        if (Platform.OS === 'android') {
+          const granted = await PermissionsAndroid.requestMultiple([
+            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+            PermissionsAndroid.PERMISSIONS.CAMERA,
+          ]);
+          if (
+            granted['android.permission.RECORD_AUDIO'] !== PermissionsAndroid.RESULTS.GRANTED ||
+            granted['android.permission.CAMERA'] !== PermissionsAndroid.RESULTS.GRANTED
+          ) {
+            console.warn('Permissions not granted');
+          }
+        }
+
         agoraEngineRef.current = createAgoraRtcEngine();
         const agoraEngine = agoraEngineRef.current;
         agoraEngine.initialize({ appId: AGORA_APP_ID });
@@ -100,7 +113,7 @@ const WatchRoomScreen = () => {
           clientRoleType: ClientRoleType.ClientRoleBroadcaster,
         });
       } catch (e) {
-        console.error('Agora Error:', e);
+        console.error('Failed to initialize Agora:', e);
       }
     };
 

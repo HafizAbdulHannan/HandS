@@ -1,11 +1,39 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import axiosInstance from '../api/axiosConfig';
 
 export default function AboutScreen() {
   const navigation = useNavigation();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ avgRating: 5, total: 0 });
+  const [reviews, setReviews] = useState([]);
+
+  useEffect(() => {
+    const fetchFeedbackData = async () => {
+      try {
+        const response = await axiosInstance.get('/feedbacks');
+        const allFeedbacks = response.data;
+        
+        if (allFeedbacks.length > 0) {
+          const totalRating = allFeedbacks.reduce((sum, fb) => sum + fb.rating, 0);
+          const avg = (totalRating / allFeedbacks.length).toFixed(1);
+          setStats({ avgRating: avg, total: allFeedbacks.length });
+          
+          // Get up to 3 reviews that have text
+          const textReviews = allFeedbacks.filter(fb => fb.text && fb.text.trim().length > 0).slice(0, 3);
+          setReviews(textReviews);
+        }
+      } catch (error) {
+        console.log('Error fetching stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchFeedbackData();
+  }, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -31,7 +59,7 @@ export default function AboutScreen() {
           </View>
           <View style={styles.row}>
             <Ionicons name="mail-outline" size={20} color="#ff6b81" />
-            <Text style={styles.rowText}>contact@example.com</Text>
+            <Text style={styles.rowText}>hannanitx@gmail.com</Text>
           </View>
           <View style={styles.row}>
             <Ionicons name="location-outline" size={20} color="#ff6b81" />
@@ -41,22 +69,39 @@ export default function AboutScreen() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Ratings & Reviews</Text>
-          <View style={styles.ratingRow}>
-            <Text style={styles.ratingNumber}>4.9</Text>
-            <View style={styles.stars}>
-              <Ionicons name="star" size={20} color="#FFD700" />
-              <Ionicons name="star" size={20} color="#FFD700" />
-              <Ionicons name="star" size={20} color="#FFD700" />
-              <Ionicons name="star" size={20} color="#FFD700" />
-              <Ionicons name="star-half" size={20} color="#FFD700" />
-            </View>
-          </View>
-          <Text style={styles.reviewCount}>Based on 12k reviews</Text>
           
-          <View style={styles.reviewBox}>
-            <Text style={styles.reviewAuthor}>"Best app for couples!"</Text>
-            <Text style={styles.reviewText}>This app completely changed how we stay connected. The private gallery is amazing.</Text>
-          </View>
+          {loading ? (
+            <ActivityIndicator color="#ff6b81" />
+          ) : (
+            <>
+              <View style={styles.ratingRow}>
+                <Text style={styles.ratingNumber}>{stats.avgRating}</Text>
+                <View style={styles.stars}>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <Ionicons 
+                      key={star} 
+                      name={star <= Math.round(stats.avgRating) ? "star" : "star-outline"} 
+                      size={20} 
+                      color="#FFD700" 
+                    />
+                  ))}
+                </View>
+              </View>
+              <Text style={styles.reviewCount}>Based on {stats.total} reviews</Text>
+              
+              {reviews.map(review => (
+                <View key={review._id} style={styles.reviewBox}>
+                  <Text style={styles.reviewAuthor}>{review.user?.username || 'Anonymous'}</Text>
+                  <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                    {[1,2,3,4,5].map(i => (
+                      <Ionicons key={i} name={i <= review.rating ? "star" : "star-outline"} size={12} color="#FFD700" />
+                    ))}
+                  </View>
+                  <Text style={styles.reviewText}>{review.text}</Text>
+                </View>
+              ))}
+            </>
+          )}
         </View>
 
       </ScrollView>
@@ -65,109 +110,23 @@ export default function AboutScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#f8f9fa',
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1a1a1a',
-  },
-  content: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  logoText: {
-    fontSize: 48,
-    fontWeight: '900',
-    color: '#ff6b81',
-    letterSpacing: 2,
-  },
-  version: {
-    fontSize: 14,
-    color: '#888',
-    marginTop: 5,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#1a1a1a',
-    marginBottom: 16,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  rowText: {
-    fontSize: 16,
-    color: '#444',
-    marginLeft: 12,
-    fontWeight: '500',
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  ratingNumber: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: '#1a1a1a',
-    marginRight: 10,
-  },
-  stars: {
-    flexDirection: 'row',
-  },
-  reviewCount: {
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 20,
-  },
-  reviewBox: {
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderRadius: 12,
-  },
-  reviewAuthor: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 4,
-  },
-  reviewText: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-  }
+  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#f8f9fa' },
+  backButton: { width: 44, height: 44, justifyContent: 'center', alignItems: 'flex-start' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
+  content: { padding: 24, paddingBottom: 40 },
+  logoContainer: { alignItems: 'center', marginBottom: 40 },
+  logoText: { fontSize: 48, fontWeight: '900', color: '#ff6b81', letterSpacing: 2 },
+  version: { fontSize: 14, color: '#888', marginTop: 5 },
+  card: { backgroundColor: '#ffffff', borderRadius: 20, padding: 24, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 10, elevation: 2 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a1a', marginBottom: 16 },
+  row: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  rowText: { fontSize: 16, color: '#444', marginLeft: 12, fontWeight: '500' },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  ratingNumber: { fontSize: 32, fontWeight: '900', color: '#1a1a1a', marginRight: 10 },
+  stars: { flexDirection: 'row' },
+  reviewCount: { fontSize: 14, color: '#888', marginBottom: 20 },
+  reviewBox: { backgroundColor: '#f8f9fa', padding: 16, borderRadius: 12, marginBottom: 10 },
+  reviewAuthor: { fontSize: 15, fontWeight: '700', color: '#1a1a1a', marginBottom: 2 },
+  reviewText: { fontSize: 14, color: '#666', lineHeight: 20 }
 });

@@ -1,13 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { getTodayQuestion, answerQuestion } = require('../controllers/questionController');
+const { getQuestions, submitQuestion } = require('../controllers/questionController');
 const { protect } = require('../middleware/authMiddleware');
-const { requirePairing } = require('../middleware/pairMiddleware');
+const { upload } = require('../controllers/authController');
 
 router.use(protect);
-router.use(requirePairing);
-
-router.get('/today', getTodayQuestion);
-router.post('/answer', answerQuestion);
+router.get('/', getQuestions);
+router.post('/', upload.single('media'), submitQuestion);
 
 module.exports = router;

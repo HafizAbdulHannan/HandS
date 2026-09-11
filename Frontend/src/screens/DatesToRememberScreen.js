@@ -309,7 +309,7 @@ export default function DatesToRememberScreen() {
                     value={date}
                     mode="date"
                     display="default"
-                    onValueChange={(selectedDate) => {
+                    onValueChange={(event, selectedDate) => {
                       if (selectedDate) {
                         const newDate = new Date(date);
                         newDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
@@ -324,7 +324,7 @@ export default function DatesToRememberScreen() {
                     value={date}
                     mode="time"
                     display="default"
-                    onValueChange={(selectedDate) => {
+                    onValueChange={(event, selectedDate) => {
                       if (selectedDate) {
                         const newDate = new Date(date);
                         newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());

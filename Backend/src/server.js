@@ -66,6 +66,7 @@ const moodRoutes = require('./routes/moodRoutes');
 const questionRoutes = require('./routes/questionRoutes');
 const listRoutes = require('./routes/listRoutes');
 const petRoutes = require('./routes/petRoutes'); // NEW
+const feedbackRoutes = require('./routes/feedbackRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/pairing', pairingRoutes);
@@ -80,6 +81,7 @@ app.use('/api/moods', moodRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/lists', listRoutes);
 app.use('/api/pets', petRoutes);
+app.use('/api/feedbacks', feedbackRoutes);
 
 // Static folder setup for uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));

@@ -7,25 +7,24 @@ import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
 
-export default function FeedbackScreen() {
-  const [feedbackText, setFeedbackText] = useState('');
-  const [rating, setRating] = useState(5);
+export default function AskQuestionScreen() {
+  const [questionText, setQuestionText] = useState('');
   const [image, setImage] = useState(null);
-  const [feedbacks, setFeedbacks] = useState([]);
+  const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const navigation = useNavigation();
 
   useEffect(() => {
-    fetchFeedbacks();
+    fetchQuestions();
   }, []);
 
-  const fetchFeedbacks = async () => {
+  const fetchQuestions = async () => {
     try {
-      const response = await axiosInstance.get('/feedbacks');
-      setFeedbacks(response.data);
+      const response = await axiosInstance.get('/questions');
+      setQuestions(response.data);
     } catch (error) {
-      console.log('Error fetching feedbacks:', error);
+      console.log('Error fetching questions:', error);
     } finally {
       setLoading(false);
     }
@@ -43,61 +42,57 @@ export default function FeedbackScreen() {
   };
 
   const handleSubmit = async () => {
-    if (feedbackText.trim() === '' && !image) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Please enter feedback or attach an image.' });
+    if (questionText.trim() === '') {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Please enter a question.' });
       return;
     }
 
     setSubmitting(true);
     try {
       const formData = new FormData();
-      formData.append('rating', rating);
-      if (feedbackText) formData.append('text', feedbackText);
+      formData.append('questionText', questionText);
       if (image) {
         formData.append('media', {
           uri: Platform.OS === 'ios' ? image.uri.replace('file://', '') : image.uri,
-          name: 'feedback.jpg',
+          name: 'question.jpg',
           type: 'image/jpeg'
         });
       }
 
-      await axiosInstance.post('/feedbacks', formData, {
+      await axiosInstance.post('/questions', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      Toast.show({ type: 'success', text1: 'Thank You!', text2: 'Your feedback was submitted.' });
-      setFeedbackText('');
-      setRating(5);
+      Toast.show({ type: 'success', text1: 'Sent!', text2: 'The developer will reply soon.' });
+      setQuestionText('');
       setImage(null);
-      fetchFeedbacks();
+      fetchQuestions();
     } catch (error) {
-      console.log('Error submitting feedback:', error);
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to submit feedback' });
+      console.log('Error submitting question:', error);
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to submit question' });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const renderFeedbackItem = ({ item }) => (
-    <View style={styles.feedbackItem}>
-      <View style={styles.fbHeader}>
-        <Text style={styles.fbUser}>{item.user?.username || 'Anonymous'}</Text>
-        <View style={styles.starsContainerSm}>
-          {[1,2,3,4,5].map(i => (
-            <Ionicons key={i} name={i <= item.rating ? "star" : "star-outline"} size={14} color="#FFD700" />
-          ))}
-        </View>
-      </View>
-      {item.text ? <Text style={styles.fbText}>{item.text}</Text> : null}
+  const renderQuestionItem = ({ item }) => (
+    <View style={styles.qItem}>
+      <Text style={styles.qUser}>You Asked:</Text>
+      <Text style={styles.qText}>{item.questionText}</Text>
       {item.imageUrl ? (
-        <Image source={{ uri: `${STATIC_URL}${item.imageUrl}` }} style={styles.fbImage} />
+        <Image source={{ uri: `${STATIC_URL}${item.imageUrl}` }} style={styles.qImage} />
       ) : null}
+      
       {item.devReply ? (
         <View style={styles.devReplyContainer}>
-          <Text style={styles.devReplyTitle}>Developer Reply:</Text>
+          <Text style={styles.devReplyTitle}>Developer Answer:</Text>
           <Text style={styles.devReplyText}>{item.devReply}</Text>
         </View>
-      ) : null}
+      ) : (
+        <View style={styles.waitingContainer}>
+          <Text style={styles.waitingText}>Waiting for response...</Text>
+        </View>
+      )}
     </View>
   );
 
@@ -112,43 +107,36 @@ export default function FeedbackScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Feedback</Text>
+          <Text style={styles.headerTitle}>Ask a Question</Text>
           <View style={{ width: 44 }} />
         </View>
 
         <FlatList
-          data={feedbacks}
+          data={questions}
           keyExtractor={item => item._id}
-          renderItem={renderFeedbackItem}
+          renderItem={renderQuestionItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
             <View style={styles.formContainer}>
-              <Text style={styles.title}>We value your input</Text>
+              <Text style={styles.title}>Have a question?</Text>
+              <Text style={styles.subtitle}>Ask the developer anything! Attach screenshots if you need help with a bug.</Text>
               
-              <View style={styles.ratingContainer}>
-                {[1,2,3,4,5].map(star => (
-                  <TouchableOpacity key={star} onPress={() => setRating(star)}>
-                    <Ionicons name={star <= rating ? "star" : "star-outline"} size={40} color="#FFD700" />
-                  </TouchableOpacity>
-                ))}
-              </View>
-
               <TextInput
                 style={styles.textInput}
                 multiline
                 numberOfLines={4}
-                placeholder="Share your thoughts..."
+                placeholder="Type your question..."
                 placeholderTextColor="#aaa"
-                value={feedbackText}
-                onChangeText={setFeedbackText}
+                value={questionText}
+                onChangeText={setQuestionText}
                 textAlignVertical="top"
               />
 
               <View style={styles.formRow}>
                 <TouchableOpacity style={styles.imageBtn} onPress={pickImage}>
-                  <Ionicons name="image-outline" size={24} color="#ff6b81" />
-                  <Text style={styles.imageBtnText}>{image ? 'Image Attached' : 'Attach Image'}</Text>
+                  <Ionicons name="image-outline" size={24} color="#6c5ce7" />
+                  <Text style={styles.imageBtnText}>{image ? 'Screenshot Attached' : 'Attach Screenshot'}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
@@ -160,7 +148,7 @@ export default function FeedbackScreen() {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.sectionTitle}>Recent Feedback</Text>
+              <Text style={styles.sectionTitle}>Previous Questions</Text>
             </View>
           }
         />
@@ -180,30 +168,30 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
   listContent: { paddingHorizontal: 20, paddingBottom: 40 },
   formContainer: { marginBottom: 30 },
-  title: { fontSize: 24, fontWeight: '800', color: '#1a1a1a', marginBottom: 20, textAlign: 'center' },
-  ratingContainer: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 20 },
+  title: { fontSize: 24, fontWeight: '800', color: '#1a1a1a', marginBottom: 5 },
+  subtitle: { fontSize: 14, color: '#666', marginBottom: 20 },
   textInput: {
     backgroundColor: '#fafafa', borderWidth: 1, borderColor: '#eee',
     borderRadius: 16, padding: 15, fontSize: 16, color: '#333', minHeight: 120, marginBottom: 15
   },
   formRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  imageBtn: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 12, backgroundColor: '#fff0f3' },
-  imageBtnText: { color: '#ff6b81', fontWeight: 'bold', marginLeft: 8 },
-  button: { backgroundColor: '#ff6b81', paddingHorizontal: 30, paddingVertical: 14, borderRadius: 20 },
+  imageBtn: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 12, backgroundColor: '#f3f0ff' },
+  imageBtnText: { color: '#6c5ce7', fontWeight: 'bold', marginLeft: 8 },
+  button: { backgroundColor: '#6c5ce7', paddingHorizontal: 30, paddingVertical: 14, borderRadius: 20 },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
   sectionTitle: { fontSize: 20, fontWeight: 'bold', marginTop: 40, marginBottom: 15 },
-  feedbackItem: {
+  qItem: {
     backgroundColor: '#fff', borderRadius: 16, padding: 15, marginBottom: 15,
     borderWidth: 1, borderColor: '#eee',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2
   },
-  fbHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  fbUser: { fontWeight: 'bold', fontSize: 16 },
-  starsContainerSm: { flexDirection: 'row', gap: 2 },
-  fbText: { fontSize: 15, color: '#444', marginBottom: 10 },
-  fbImage: { width: '100%', height: 150, borderRadius: 10, marginBottom: 10, resizeMode: 'cover' },
-  devReplyContainer: { backgroundColor: '#f0fdf4', padding: 10, borderRadius: 10, marginTop: 5 },
-  devReplyTitle: { fontWeight: 'bold', color: '#166534', fontSize: 13, marginBottom: 4 },
-  devReplyText: { color: '#15803d', fontSize: 14 }
+  qUser: { fontWeight: 'bold', fontSize: 14, color: '#666', marginBottom: 5 },
+  qText: { fontSize: 16, color: '#222', marginBottom: 10 },
+  qImage: { width: '100%', height: 150, borderRadius: 10, marginBottom: 10, resizeMode: 'cover' },
+  devReplyContainer: { backgroundColor: '#eef2ff', padding: 10, borderRadius: 10, marginTop: 5 },
+  devReplyTitle: { fontWeight: 'bold', color: '#3730a3', fontSize: 13, marginBottom: 4 },
+  devReplyText: { color: '#4338ca', fontSize: 14 },
+  waitingContainer: { backgroundColor: '#fef3c7', padding: 10, borderRadius: 10, marginTop: 5 },
+  waitingText: { color: '#b45309', fontSize: 13, fontStyle: 'italic' }
 });

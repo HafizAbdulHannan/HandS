@@ -40,6 +40,7 @@ import DrawFunScreen from '../screens/DrawFunScreen';
 import DrawFunReplyScreen from '../screens/DrawFunReplyScreen';
 import MoodTrackerScreen from '../screens/MoodTrackerScreen';
 import SharedListScreen from '../screens/SharedListScreen';
+import AskQuestionScreen from '../screens/AskQuestionScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -97,9 +98,15 @@ function MainTabs() {
       };
       socket.on('receive_watch_invite', handleWatchInvite);
 
-      const handleHeartbeat = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 200);
+      const handleHeartbeat = async () => {
+        try {
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          setTimeout(async () => {
+            try { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch (e) {}
+          }, 200);
+        } catch (error) {
+          console.log('Haptics failed', error);
+        }
       };
       socket.on('receive_heartbeat', handleHeartbeat);
 
@@ -199,6 +206,7 @@ export default function AppNavigator() {
           <Stack.Screen name="DrawFunReply" component={DrawFunReplyScreen} />
           <Stack.Screen name="MoodTracker" component={MoodTrackerScreen} />
           <Stack.Screen name="SharedList" component={SharedListScreen} />
+          <Stack.Screen name="AskQuestion" component={AskQuestionScreen} />
           <Stack.Screen name="About" component={AboutScreen} />
           <Stack.Screen name="Policy" component={PolicyScreen} />
         </>
