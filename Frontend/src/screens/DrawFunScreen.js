@@ -241,6 +241,26 @@ export default function DrawFunScreen() {
                       {el.shape === 'heart' && <Path d="M50,90 L42,82 C14,56 0,42 0,25 C0,11 11,0 25,0 C33,0 40,4 45,10 C50,4 57,0 65,0 C79,0 90,11 90,25 C90,42 76,56 48,82 L50,90 Z" fill={el.color} transform="translate(5, 5)" />}
                     </Svg>
                   </DraggableItem>
+                );
+              }
+              return null;
+            })}
+          </View>
+        </ViewShot>
+      </View>
+
+      {/* Toolbar */}
+      <View style={[styles.toolbar, { backgroundColor: theme.colors.card }]}>
+        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('color'); setShowTools(true); }}>
+          <View style={[styles.colorPreview, { backgroundColor: color }]} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('stroke'); setShowTools(true); }}>
+          <Ionicons name="pencil" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('sticker'); setShowTools(true); }}>
+          <Ionicons name="happy-outline" size={24} color={theme.colors.text} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('text'); setShowTools(true); }}>

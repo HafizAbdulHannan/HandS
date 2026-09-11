@@ -3,7 +3,7 @@ const router = express.Router();
 const { getMessages, sendMessage } = require('../controllers/messageController');
 const { protect } = require('../middleware/authMiddleware');
 const { requirePairing } = require('../middleware/pairMiddleware');
-const { upload } = require('../controllers/authController'); // Using the same multer config
+const upload = require('../middleware/uploadMiddleware');
 
 router.use(protect);
 router.use(requirePairing);

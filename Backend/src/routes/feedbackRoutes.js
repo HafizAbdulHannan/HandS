@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getFeedbacks, submitFeedback, likeFeedback } = require('../controllers/feedbackController');
 const { protect } = require('../middleware/authMiddleware');
-const { upload } = require('../controllers/authController');
+const upload = require('../middleware/uploadMiddleware');
 
 router.get('/', getFeedbacks); // Public or protect depending on Web UI, let's allow all authenticated for app
 
