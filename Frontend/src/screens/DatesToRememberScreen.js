@@ -284,7 +284,7 @@ export default function DatesToRememberScreen() {
                 value={date}
                 mode="datetime"
                 display="spinner"
-                onValueChange={(selectedDate) => {
+                onChange={(event, selectedDate) => {
                   const currentDate = selectedDate || date;
                   setDate(currentDate);
                 }}
@@ -309,14 +309,14 @@ export default function DatesToRememberScreen() {
                     value={date}
                     mode="date"
                     display="default"
-                    onValueChange={(event, selectedDate) => {
-                      if (selectedDate) {
+                    onChange={(event, selectedDate) => {
+                      setShowDatePicker(false);
+                      if (event.type === 'set' && selectedDate) {
                         const newDate = new Date(date);
                         newDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
                         setDate(newDate);
                       }
                     }}
-                    onDismiss={() => setShowDatePicker(false)}
                   />
                 )}
                 {showTimePicker && (
@@ -324,14 +324,14 @@ export default function DatesToRememberScreen() {
                     value={date}
                     mode="time"
                     display="default"
-                    onValueChange={(event, selectedDate) => {
-                      if (selectedDate) {
+                    onChange={(event, selectedDate) => {
+                      setShowTimePicker(false);
+                      if (event.type === 'set' && selectedDate) {
                         const newDate = new Date(date);
                         newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
                         setDate(newDate);
                       }
                     }}
-                    onDismiss={() => setShowTimePicker(false)}
                   />
                 )}
               </View>

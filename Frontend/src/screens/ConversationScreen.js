@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
+import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
 import Toast from 'react-native-toast-message';
 
 export default function ConversationScreen() {
@@ -116,10 +116,15 @@ export default function ConversationScreen() {
         name: 'voicenote.m4a',
         type: 'audio/m4a'
       });
+      console.log('Sending voice note with formData:', formData);
       try {
         const uploadRes = await axiosInstance.post('/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+          headers: { 
+            'Content-Type': 'multipart/form-data',
+            'Accept': 'application/json'
+          }
         });
+        console.log('Voice note uploaded successfully:', uploadRes.data);
         await sendMessage({ audioUrl: uploadRes.data });
       } catch (err) {
         console.error('Failed to upload audio', err);
@@ -148,7 +153,7 @@ export default function ConversationScreen() {
         <View style={styles.headerInfo}>
           <View style={[styles.avatarPlaceholder, { overflow: 'hidden' }]}>
             {partner.avatar ? (
-              <Image source={{ uri: `${STATIC_URL}${partner.avatar}` }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+              <Image source={{ uri: getMediaUrl(partner.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
             ) : (
               <Text style={styles.avatarLetter}>{partner.username.charAt(0).toUpperCase()}</Text>
             )}

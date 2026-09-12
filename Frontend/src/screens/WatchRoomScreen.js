@@ -47,6 +47,7 @@ const WatchRoomScreen = () => {
   const [isJoined, setIsJoined] = useState(false);
   const [localUid, setLocalUid] = useState(0);
   const [remoteUids, setRemoteUids] = useState([]);
+  const [isEngineInitialized, setIsEngineInitialized] = useState(false);
   const agoraEngineRef = useRef(null);
 
   const playerRef = useRef(null);
@@ -112,6 +113,8 @@ const WatchRoomScreen = () => {
           channelProfile: ChannelProfileType.ChannelProfileCommunication,
           clientRoleType: ClientRoleType.ClientRoleBroadcaster,
         });
+        
+        setIsEngineInitialized(true);
       } catch (e) {
         console.error('Failed to initialize Agora:', e);
       }
@@ -635,9 +638,9 @@ const WatchRoomScreen = () => {
                   <Ionicons name="desktop-outline" size={60} color={theme.colors.primary} />
                   <Text style={{ color: '#fff', marginTop: 10, fontSize: 16 }}>You are sharing your screen</Text>
                 </View>
-              ) : (
+              ) : isEngineInitialized ? (
                 <RtcSurfaceView canvas={{ uid: parseInt(mediaUrl) || 0 }} style={{ flex: 1 }} />
-              )}
+              ) : null}
             </View>
           </View>
         ) : (
@@ -723,7 +726,7 @@ const WatchRoomScreen = () => {
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Live Video Call</Text>
         
         {/* WhatsApp-Style PIP Video Call Area */}
-        {(isVideoOn || remoteUids.length > 0) && (
+        {(isVideoOn || remoteUids.length > 0) && isEngineInitialized && (
           <View style={[styles.videoCallContainer, { backgroundColor: theme.colors.card }]}>
             {remoteUids.length > 0 ? (
               <View style={styles.mainVideoContainer}>

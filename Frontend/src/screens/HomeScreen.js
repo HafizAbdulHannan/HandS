@@ -16,7 +16,7 @@ import * as NavigationBar from 'expo-navigation-bar';
 import Toast from 'react-native-toast-message';
 
 export default function HomeScreen({ route }) {
-  const { sendMissYou, sendLoveYou, sendNotification, animationType } = useSocket();
+  const { socket, sendMissYou, sendLoveYou, sendNotification, animationType } = useSocket();
   const { user } = useAuth();
   const { theme } = useThemeContext();
   const navigation = useNavigation();
@@ -72,9 +72,13 @@ export default function HomeScreen({ route }) {
 
 
   const sendHeartbeat = () => {
-    if (socket && user?.partner) {
-      const room = [user._id, user.partner].sort().join('_');
-      socket.emit('send_heartbeat', { room });
+    try {
+      if (socket && user?.partner) {
+        const room = [user._id, user.partner].sort().join('_');
+        socket.emit('send_heartbeat', { room });
+      }
+    } catch (e) {
+      console.log('Heartbeat error:', e);
     }
   };
 

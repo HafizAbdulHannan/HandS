@@ -16,9 +16,8 @@ const storage = multer.diskStorage({
 function checkFileType(file, cb) {
   const filetypes = /jpg|jpeg|png|gif|mp4|mov|pdf|doc|docx|mp3|wav|m4a|aac|webm|ogg/;
   const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = filetypes.test(file.mimetype);
-
-  if (extname && mimetype) {
+  // Mobile app might send generic application/octet-stream for audio/video files
+  if (extname) {
     return cb(null, true);
   } else {
     cb('Images, Videos, Audio, and Files only!');

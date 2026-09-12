@@ -77,6 +77,8 @@ export default function DrawFunScreen() {
     PanResponder.create({
       onStartShouldSetPanResponder: () => toolModeRef.current === 'draw' || toolModeRef.current === 'eraser',
       onMoveShouldSetPanResponder: () => toolModeRef.current === 'draw' || toolModeRef.current === 'eraser',
+      onStartShouldSetPanResponderCapture: () => toolModeRef.current === 'draw' || toolModeRef.current === 'eraser',
+      onMoveShouldSetPanResponderCapture: () => toolModeRef.current === 'draw' || toolModeRef.current === 'eraser',
       onPanResponderGrant: handlePanResponderGrant,
       onPanResponderMove: handlePanResponderMove,
       onPanResponderRelease: handlePanResponderRelease,
@@ -203,7 +205,7 @@ export default function DrawFunScreen() {
       {/* Canvas */}
       <View style={styles.canvasContainer}>
         <ViewShot ref={viewShotRef} style={styles.viewShot} options={{ format: 'jpg', quality: 0.8, result: 'tmpfile' }}>
-          <View style={styles.canvasBackground} {...panResponder.panHandlers}>
+          <View collapsable={false} style={styles.canvasBackground} {...panResponder.panHandlers}>
             {bgImage && <Image source={{ uri: bgImage }} style={StyleSheet.absoluteFill} resizeMode="cover" />}
             
             <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
