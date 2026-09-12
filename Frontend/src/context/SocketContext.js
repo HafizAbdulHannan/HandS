@@ -56,6 +56,14 @@ export const SocketProvider = ({ children }) => {
       Toast.show({ type: 'info', text1: title, text2: message, position: 'top' });
     });
 
+    // Listen for Heartbeat
+    newSocket.on('receive_heartbeat', () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      Vibration.vibrate([0, 100, 100, 100, 100, 100]); // Heartbeat-like vibration
+      setAnimationType('heartbeat');
+      setTimeout(() => setAnimationType(null), 3000);
+    });
+
     // Check for pending animation on load
     if (user?.pendingAnimation) {
       if (user.pendingAnimation === 'love_you' || user.pendingAnimation === 'miss_you') {

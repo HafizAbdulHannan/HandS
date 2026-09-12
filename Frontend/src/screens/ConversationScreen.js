@@ -120,7 +120,6 @@ export default function ConversationScreen() {
       try {
         const uploadRes = await axiosInstance.post('/upload', formData, {
           headers: { 
-            'Content-Type': 'multipart/form-data',
             'Accept': 'application/json'
           }
         });

@@ -205,7 +205,7 @@ export default function DrawFunScreen() {
       {/* Canvas */}
       <View style={styles.canvasContainer}>
         <ViewShot ref={viewShotRef} style={styles.viewShot} options={{ format: 'jpg', quality: 0.8, result: 'tmpfile' }}>
-          <View collapsable={false} style={styles.canvasBackground} {...panResponder.panHandlers}>
+          <View collapsable={false} style={styles.canvasBackground}>
             {bgImage && <Image source={{ uri: bgImage }} style={StyleSheet.absoluteFill} resizeMode="cover" />}
             
             <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -247,6 +247,14 @@ export default function DrawFunScreen() {
               }
               return null;
             })}
+
+            {(toolMode === 'draw' || toolMode === 'eraser') && (
+              <View 
+                style={[StyleSheet.absoluteFill, { zIndex: 9999 }]} 
+                {...panResponder.panHandlers} 
+                collapsable={false}
+              />
+            )}
           </View>
         </ViewShot>
       </View>

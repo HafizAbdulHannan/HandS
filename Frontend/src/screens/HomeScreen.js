@@ -25,7 +25,7 @@ export default function HomeScreen({ route }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [newPostContent, setNewPostContent] = useState('');
   const [isPosting, setIsPosting] = useState(false);
-  
+
   useFocusEffect(
     React.useCallback(() => {
       if (Platform.OS === 'android') {
@@ -33,12 +33,12 @@ export default function HomeScreen({ route }) {
       }
     }, [theme.colors.background])
   );
-  
+
   const [selectedMediaType, setSelectedMediaType] = useState('none');
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [partner, setPartner] = useState(null);
   const [partnerData, setPartnerData] = useState(null);
-  
+
   const [dailyQuestion, setDailyQuestion] = useState(null);
   const [myAnswerInput, setMyAnswerInput] = useState('');
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
@@ -150,7 +150,7 @@ export default function HomeScreen({ route }) {
   const handleLike = async (postId, currentLikes) => {
     const userId = user._id;
     const isLiked = currentLikes.includes(userId);
-    
+
     setPosts(posts.map(post => {
       if (post._id === postId) {
         let newLikes = [...post.likes];
@@ -253,14 +253,14 @@ export default function HomeScreen({ route }) {
     setOptionsModalVisible(false);
     if (!selectedPostOptions) return;
     const postId = selectedPostOptions._id;
-    
+
     Alert.alert(
       "Delete Post",
       "Are you sure you want to delete this post?",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
+        {
+          text: "Delete",
           style: "destructive",
           onPress: async () => {
             setPosts(posts.filter(p => p._id !== postId));
@@ -284,7 +284,7 @@ export default function HomeScreen({ route }) {
       allowsEditing: true,
       quality: 1, // Pick full quality, we compress manually
     });
-    
+
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const asset = result.assets[0];
       try {
@@ -315,7 +315,7 @@ export default function HomeScreen({ route }) {
       allowsEditing: true,
       quality: 0.8,
     });
-    
+
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const asset = result.assets[0];
       setSelectedMedia({
@@ -333,7 +333,7 @@ export default function HomeScreen({ route }) {
       type: '*/*',
       copyToCacheDirectory: true,
     });
-    
+
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const asset = result.assets[0];
       setSelectedMedia({
@@ -349,9 +349,9 @@ export default function HomeScreen({ route }) {
   const handleCreatePost = async () => {
     if (!newPostContent.trim() && !selectedMedia) return;
     setIsPosting(true);
-    
+
     let mediaUrl = '';
-    
+
     try {
       if (selectedMedia) {
         if (selectedMedia.base64String) {
@@ -363,7 +363,7 @@ export default function HomeScreen({ route }) {
             name: selectedMedia.name,
             type: selectedMedia.mimeType,
           });
-          
+
           const uploadResponse = await axiosInstance.post('/upload', formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
           });
@@ -371,15 +371,15 @@ export default function HomeScreen({ route }) {
         }
       }
 
-      await axiosInstance.post('/posts', { 
+      await axiosInstance.post('/posts', {
         content: newPostContent,
         mediaUrl: mediaUrl,
         mediaType: selectedMedia ? selectedMedia.type : 'none'
       });
-      
+
       // Notify partner
       sendNotification('New Memory Added! 💖', `${user?.username || 'Your partner'} just posted a new memory.`);
-      
+
       setNewPostContent('');
       setSelectedMedia(null);
       setSelectedMediaType('none');
@@ -394,8 +394,8 @@ export default function HomeScreen({ route }) {
   };
 
   const filteredPosts = posts.filter(post => {
-    const matchesSearch = post.content?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          post.author?.username?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = post.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.author?.username?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesSearch;
   });
 
@@ -415,7 +415,7 @@ export default function HomeScreen({ route }) {
             <Text style={[styles.dailyQuestionTitle, { color: theme.colors.text }]}>Daily Question</Text>
           </View>
           <Text style={[styles.dailyQuestionText, { color: theme.colors.text }]}>{dailyQuestion.question}</Text>
-          
+
           {dailyQuestion.myAnswer ? (
             <View style={styles.answersContainer}>
               <View style={styles.answerBox}>
@@ -468,7 +468,7 @@ export default function HomeScreen({ route }) {
           </View>
         </View>
       )}
-      
+
       <View style={[styles.postCreatorBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, shadowColor: theme.colors.text }]}>
         <View style={styles.postCreatorHeader}>
           <View style={[styles.currentUserAvatar, { overflow: 'hidden' }]}>
@@ -487,7 +487,7 @@ export default function HomeScreen({ route }) {
             multiline
           />
         </View>
-        
+
         {selectedMedia && (
           <View style={styles.previewContainer}>
             {selectedMedia.type === 'image' ? (
@@ -503,7 +503,7 @@ export default function HomeScreen({ route }) {
             </TouchableOpacity>
           </View>
         )}
-        
+
         <View style={styles.postActionsRow}>
           <TouchableOpacity style={styles.postActionBtn} onPress={pickImage}>
             <Ionicons name="image-outline" size={22} color={theme.colors.primary} />
@@ -518,7 +518,7 @@ export default function HomeScreen({ route }) {
             <Text style={[styles.postActionText, { color: theme.colors.textSecondary }]}>Document</Text>
           </TouchableOpacity>
         </View>
-        
+
         {(newPostContent || selectedMedia) && (
           <TouchableOpacity style={styles.submitPostBtn} onPress={handleCreatePost} disabled={isPosting}>
             {isPosting ? (
@@ -534,262 +534,263 @@ export default function HomeScreen({ route }) {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-      {animationType === 'miss_you' && <FloatingEmojis emoji="🥺" text="Miss You" />}
-      {animationType === 'love_you' && <FloatingEmojis emoji="😘" text="Love You" />}
+        {animationType === 'miss_you' && <FloatingEmojis emoji="🥺" text="Miss You" />}
+        {animationType === 'love_you' && <FloatingEmojis emoji="😘" text="Love You" />}
+        {animationType === 'heartbeat' && <FloatingEmojis emoji="💓" text="Heartbeat" />}
 
-      <View style={[styles.header, { backgroundColor: theme.colors.background }]}>
-        <View style={styles.headerTitle}>
-          <Text style={[styles.title, { color: theme.colors.text }]}>Our Space</Text>
-        </View>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity style={[styles.headerProfileIcon, { overflow: 'hidden' }]} onPress={() => navigation.navigate('Profile')}>
-            {user?.avatar ? (
-              <Image source={{ uri: getMediaUrl(user.avatar) }} style={styles.headerProfileImage} />
-            ) : (
-              <Text style={styles.headerProfileLetter}>{user?.username?.charAt(0).toUpperCase() || 'U'}</Text>
+        <View style={[styles.header, { backgroundColor: theme.colors.background }]}>
+          <View style={styles.headerTitle}>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Our Space</Text>
+          </View>
+          <View style={styles.headerIcons}>
+            <TouchableOpacity style={[styles.headerProfileIcon, { overflow: 'hidden' }]} onPress={() => navigation.navigate('Profile')}>
+              {user?.avatar ? (
+                <Image source={{ uri: getMediaUrl(user.avatar) }} style={styles.headerProfileImage} />
+              ) : (
+                <Text style={styles.headerProfileLetter}>{user?.username?.charAt(0).toUpperCase() || 'U'}</Text>
+              )}
+            </TouchableOpacity>
+            {partner && (
+              <>
+                <View style={styles.heartIconContainer}>
+                  <Ionicons name="heart" size={22} color="#ff6b81" />
+                </View>
+                <TouchableOpacity onPress={() => navigation.navigate('PartnerProfile')} style={[styles.headerProfileIcon, { backgroundColor: '#ff9ff3', overflow: 'hidden' }]}>
+                  {partner.avatar ? (
+                    <Image source={{ uri: getMediaUrl(partner.avatar) }} style={styles.headerProfileImage} />
+                  ) : (
+                    <Text style={styles.headerProfileLetter}>{partner.username?.charAt(0).toUpperCase() || 'P'}</Text>
+                  )}
+                </TouchableOpacity>
+              </>
             )}
-          </TouchableOpacity>
-          {partner && (
-            <>
-              <View style={styles.heartIconContainer}>
-                <Ionicons name="heart" size={22} color="#ff6b81" />
-              </View>
-              <TouchableOpacity onPress={() => navigation.navigate('PartnerProfile')} style={[styles.headerProfileIcon, { backgroundColor: '#ff9ff3', overflow: 'hidden' }]}>
-                {partner.avatar ? (
-                  <Image source={{ uri: getMediaUrl(partner.avatar) }} style={styles.headerProfileImage} />
-                ) : (
-                  <Text style={styles.headerProfileLetter}>{partner.username?.charAt(0).toUpperCase() || 'P'}</Text>
-                )}
-              </TouchableOpacity>
-            </>
+          </View>
+        </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchContainerWrapper}>
+          <View style={[styles.searchContainer, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]}>
+            <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.searchIcon} />
+            <TextInput
+              style={[styles.searchInput, { color: theme.colors.text }]}
+              placeholder="Search posts..."
+              placeholderTextColor={theme.colors.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+          {!user?.partner && (
+            <TouchableOpacity
+              style={styles.connectPartnerBtn}
+              onPress={() => navigation.navigate('Pairing')}
+            >
+              <Ionicons name="add" size={18} color="#fff" />
+              <Text style={styles.connectPartnerText}>Partner</Text>
+            </TouchableOpacity>
           )}
         </View>
-      </View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainerWrapper}>
-        <View style={[styles.searchContainer, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]}>
-          <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={styles.searchIcon} />
-          <TextInput 
-            style={[styles.searchInput, { color: theme.colors.text }]}
-            placeholder="Search posts..."
-            placeholderTextColor={theme.colors.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-        {!user?.partner && (
-          <TouchableOpacity 
-            style={styles.connectPartnerBtn}
-            onPress={() => navigation.navigate('Pairing')}
-          >
-            <Ionicons name="add" size={18} color="#fff" />
-            <Text style={styles.connectPartnerText}>Partner</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <FlatList
-        ref={flatListRef}
-        data={filteredPosts}
-        onScrollToIndexFailed={info => {
-          const wait = new Promise(resolve => setTimeout(resolve, 500));
-          wait.then(() => {
-            flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
-          });
-        }}
-        keyExtractor={(item) => item._id}
-        contentContainerStyle={styles.feed}
-        showsVerticalScrollIndicator={false}
-        initialNumToRender={5}
-        maxToRenderPerBatch={5}
-        windowSize={11}
-        removeClippedSubviews={true}
-        ListHeaderComponent={headerComponent}
-        ListEmptyComponent={
-          !refreshing && (
-            <View style={styles.emptyContainer}>
-              <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>No Posts Uploaded Today.</Text>
-            </View>
-          )
-        }
-        keyboardShouldPersistTaps="handled"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        renderItem={({ item, index }) => (
-          <Animated.View 
-            entering={FadeInUp.delay(index * 100)} 
-            layout={Layout.springify()}
-            style={[
-              styles.postCard, 
-              { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border },
-              route?.params?.highlightPostId === item._id && { borderColor: '#ff6b81', borderWidth: 2 }
-            ]}
-          >
-            <View style={styles.postHeader}>
-              <View style={[styles.avatarPlaceholder, { overflow: 'hidden' }]}>
-                {item.author?.avatar ? (
-                  <Image source={{ uri: getMediaUrl(item.author.avatar) }} style={styles.headerProfileImage} />
-                ) : (
-                  <Text style={styles.avatarLetter}>{item.author?.username?.charAt(0).toUpperCase() || 'U'}</Text>
+        <FlatList
+          ref={flatListRef}
+          data={filteredPosts}
+          onScrollToIndexFailed={info => {
+            const wait = new Promise(resolve => setTimeout(resolve, 500));
+            wait.then(() => {
+              flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
+            });
+          }}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={styles.feed}
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          windowSize={11}
+          removeClippedSubviews={true}
+          ListHeaderComponent={headerComponent}
+          ListEmptyComponent={
+            !refreshing && (
+              <View style={styles.emptyContainer}>
+                <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>No Posts Uploaded Today.</Text>
+              </View>
+            )
+          }
+          keyboardShouldPersistTaps="handled"
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          renderItem={({ item, index }) => (
+            <Animated.View
+              entering={FadeInUp.delay(index * 100)}
+              layout={Layout.springify()}
+              style={[
+                styles.postCard,
+                { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border },
+                route?.params?.highlightPostId === item._id && { borderColor: '#ff6b81', borderWidth: 2 }
+              ]}
+            >
+              <View style={styles.postHeader}>
+                <View style={[styles.avatarPlaceholder, { overflow: 'hidden' }]}>
+                  {item.author?.avatar ? (
+                    <Image source={{ uri: getMediaUrl(item.author.avatar) }} style={styles.headerProfileImage} />
+                  ) : (
+                    <Text style={styles.avatarLetter}>{item.author?.username?.charAt(0).toUpperCase() || 'U'}</Text>
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.postAuthor, { color: theme.colors.text }]}>{item.author?.username || 'User'}</Text>
+                  <Text style={[styles.postTime, { color: theme.colors.textSecondary }]}>{new Date(item.createdAt).toLocaleString()}</Text>
+                </View>
+                {item.author?._id === user?._id && (
+                  <TouchableOpacity onPress={() => openPostOptions(item)} style={styles.deletePostBtn}>
+                    <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
                 )}
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.postAuthor, { color: theme.colors.text }]}>{item.author?.username || 'User'}</Text>
-                <Text style={[styles.postTime, { color: theme.colors.textSecondary }]}>{new Date(item.createdAt).toLocaleString()}</Text>
-              </View>
-              {item.author?._id === user?._id && (
-                <TouchableOpacity onPress={() => openPostOptions(item)} style={styles.deletePostBtn}>
-                  <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
-              )}
-            </View>
-            
-            {editingPostId === item._id ? (
-              <View style={styles.editPostContainer}>
-                <TextInput
-                  style={[styles.editPostInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
-                  value={editContent}
-                  onChangeText={setEditContent}
-                  multiline
-                />
-                <View style={styles.editPostActions}>
-                  <TouchableOpacity onPress={() => setEditingPostId(null)} style={styles.editCancelBtn}>
-                    <Text style={styles.editCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={handleEditSubmit} style={styles.editSaveBtn}>
-                    <Text style={styles.editSaveText}>Save</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              item.content ? <Text style={[styles.postText, { color: theme.colors.text }]}>{item.content}</Text> : null
-            )}
-            
-            {item.mediaUrl && item.mediaType === 'image' && (
-              <Image source={{ uri: getMediaUrl(item.mediaUrl) }} style={styles.postImage} />
-            )}
-            
-            <View style={styles.postFooter}>
-              <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(item._id, item.likes)}>
-                <Ionicons name={item.likes?.includes(user._id) ? "heart" : "heart-outline"} size={24} color={item.likes?.includes(user._id) ? "#ff6b81" : theme.colors.textSecondary} />
-                <Text style={[styles.actionText, { color: theme.colors.textSecondary }]}>{item.likes?.length || 0}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionButton} onPress={() => { setActiveCommentPostId(activeCommentPostId === item._id ? null : item._id); setCommentText(''); }}>
-                <Ionicons name="chatbubble-outline" size={22} color={theme.colors.textSecondary} />
-                <Text style={[styles.actionText, { color: theme.colors.textSecondary }]}>{item.comments?.length || 0}</Text>
-              </TouchableOpacity>
-            </View>
 
-            {activeCommentPostId === item._id && (
-              <View style={styles.commentSection}>
-                {item.comments?.map((comment, index) => (
-                  <View key={index} style={styles.commentItem}>
-                    <Text style={[styles.commentAuthor, { color: theme.colors.text }]}>{comment.user?.username || 'User'}</Text>
-                    <Text style={[styles.commentText, { color: theme.colors.textSecondary }]}>{comment.text}</Text>
-                  </View>
-                ))}
-                
-                <View style={styles.commentInputContainer}>
-                  <TextInput 
-                    style={[styles.commentInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
-                    placeholder="Write a comment..."
-                    placeholderTextColor={theme.colors.textSecondary}
-                    value={commentText}
-                    onChangeText={setCommentText}
+              {editingPostId === item._id ? (
+                <View style={styles.editPostContainer}>
+                  <TextInput
+                    style={[styles.editPostInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
+                    value={editContent}
+                    onChangeText={setEditContent}
                     multiline
                   />
-                  <TouchableOpacity 
-                    style={styles.sendCommentBtn}
-                    onPress={() => handleAddComment(item._id)}
-                    disabled={isCommenting || !commentText.trim()}
-                  >
-                    {isCommenting ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Ionicons name="send" size={16} color="#fff" />
-                    )}
-                  </TouchableOpacity>
+                  <View style={styles.editPostActions}>
+                    <TouchableOpacity onPress={() => setEditingPostId(null)} style={styles.editCancelBtn}>
+                      <Text style={styles.editCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleEditSubmit} style={styles.editSaveBtn}>
+                      <Text style={styles.editSaveText}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
+              ) : (
+                item.content ? <Text style={[styles.postText, { color: theme.colors.text }]}>{item.content}</Text> : null
+              )}
+
+              {item.mediaUrl && item.mediaType === 'image' && (
+                <Image source={{ uri: getMediaUrl(item.mediaUrl) }} style={styles.postImage} />
+              )}
+
+              <View style={styles.postFooter}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(item._id, item.likes)}>
+                  <Ionicons name={item.likes?.includes(user._id) ? "heart" : "heart-outline"} size={24} color={item.likes?.includes(user._id) ? "#ff6b81" : theme.colors.textSecondary} />
+                  <Text style={[styles.actionText, { color: theme.colors.textSecondary }]}>{item.likes?.length || 0}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton} onPress={() => { setActiveCommentPostId(activeCommentPostId === item._id ? null : item._id); setCommentText(''); }}>
+                  <Ionicons name="chatbubble-outline" size={22} color={theme.colors.textSecondary} />
+                  <Text style={[styles.actionText, { color: theme.colors.textSecondary }]}>{item.comments?.length || 0}</Text>
+                </TouchableOpacity>
               </View>
-            )}
-          </Animated.View>
-        )}
-      />
 
-      <View style={styles.fabContainer}>
-        {isFabMenuOpen && (
-          <View style={styles.miniFabMenu}>
-            <TouchableOpacity 
-              style={styles.miniFab} 
-              activeOpacity={0.8} 
-              onPress={() => { setIsFabMenuOpen(false); sendLoveYou(); }}
-            >
-              <Text style={styles.miniFabIcon}>😘</Text>
-              <Text style={styles.miniFabText}>Love You</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.miniFab} 
-              activeOpacity={0.8} 
-              onPress={() => { setIsFabMenuOpen(false); sendMissYou(); }}
-            >
-              <Text style={styles.miniFabIcon}>🥺</Text>
-              <Text style={styles.miniFabText}>Miss You</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.miniFab} 
-              activeOpacity={0.8} 
-              onPressIn={sendHeartbeat}
-              onPressOut={() => setIsFabMenuOpen(false)}
-            >
-              <Text style={styles.miniFabIcon}>💓</Text>
-              <Text style={styles.miniFabText}>Heartbeat</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        <TouchableOpacity style={styles.mainFab} activeOpacity={0.8} onPress={() => setIsFabMenuOpen(!isFabMenuOpen)}>
-          <Text style={styles.mainFabIcon}>❤️</Text>
-        </TouchableOpacity>
-      </View>
+              {activeCommentPostId === item._id && (
+                <View style={styles.commentSection}>
+                  {item.comments?.map((comment, index) => (
+                    <View key={index} style={styles.commentItem}>
+                      <Text style={[styles.commentAuthor, { color: theme.colors.text }]}>{comment.user?.username || 'User'}</Text>
+                      <Text style={[styles.commentText, { color: theme.colors.textSecondary }]}>{comment.text}</Text>
+                    </View>
+                  ))}
 
-      {/* Post Options Modal */}
-      <Modal
-        visible={optionsModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setOptionsModalVisible(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
-          onPress={() => setOptionsModalVisible(false)}
+                  <View style={styles.commentInputContainer}>
+                    <TextInput
+                      style={[styles.commentInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
+                      placeholder="Write a comment..."
+                      placeholderTextColor={theme.colors.textSecondary}
+                      value={commentText}
+                      onChangeText={setCommentText}
+                      multiline
+                    />
+                    <TouchableOpacity
+                      style={styles.sendCommentBtn}
+                      onPress={() => handleAddComment(item._id)}
+                      disabled={isCommenting || !commentText.trim()}
+                    >
+                      {isCommenting ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Ionicons name="send" size={16} color="#fff" />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </Animated.View>
+          )}
+        />
+
+        <View style={styles.fabContainer}>
+          {isFabMenuOpen && (
+            <View style={styles.miniFabMenu}>
+              <TouchableOpacity
+                style={styles.miniFab}
+                activeOpacity={0.8}
+                onPress={() => { setIsFabMenuOpen(false); sendLoveYou(); }}
+              >
+                <Text style={styles.miniFabIcon}>😘</Text>
+                <Text style={styles.miniFabText}>Love You</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.miniFab}
+                activeOpacity={0.8}
+                onPress={() => { setIsFabMenuOpen(false); sendMissYou(); }}
+              >
+                <Text style={styles.miniFabIcon}>🥺</Text>
+                <Text style={styles.miniFabText}>Miss You</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.miniFab}
+                activeOpacity={0.8}
+                onPressIn={sendHeartbeat}
+                onPressOut={() => setIsFabMenuOpen(false)}
+              >
+                <Text style={styles.miniFabIcon}>💓</Text>
+                <Text style={styles.miniFabText}>Heartbeat</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          <TouchableOpacity style={styles.mainFab} activeOpacity={0.8} onPress={() => setIsFabMenuOpen(!isFabMenuOpen)}>
+            <Text style={styles.mainFabIcon}>❤️</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Post Options Modal */}
+        <Modal
+          visible={optionsModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setOptionsModalVisible(false)}
         >
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
-            <View style={styles.modalDragIndicator} />
-            <TouchableOpacity style={styles.modalOptionBtn} onPress={handleEditInit}>
-              <Ionicons name="pencil-outline" size={22} color={theme.colors.text} />
-              <Text style={[styles.modalOptionText, { color: theme.colors.text }]}>Edit Post</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalOptionBtn} onPress={handleDeleteTrigger}>
-              <Ionicons name="trash-outline" size={22} color="#ff6b81" />
-              <Text style={[styles.modalOptionText, { color: '#ff6b81' }]}>Delete Post</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setOptionsModalVisible(false)}
+          >
+            <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+              <View style={styles.modalDragIndicator} />
+              <TouchableOpacity style={styles.modalOptionBtn} onPress={handleEditInit}>
+                <Ionicons name="pencil-outline" size={22} color={theme.colors.text} />
+                <Text style={[styles.modalOptionText, { color: theme.colors.text }]}>Edit Post</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalOptionBtn} onPress={handleDeleteTrigger}>
+                <Ionicons name="trash-outline" size={22} color="#ff6b81" />
+                <Text style={[styles.modalOptionText, { color: '#ff6b81' }]}>Delete Post</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#fcfcfc', 
+  container: {
+    flex: 1,
+    backgroundColor: '#fcfcfc',
   },
   heartsOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -808,9 +809,9 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     backgroundColor: '#fcfcfc',
   },
-  title: { 
-    fontSize: 34, 
-    fontWeight: '800', 
+  title: {
+    fontSize: 34,
+    fontWeight: '800',
     color: '#1a1a1a',
   },
   profileContainer: {
@@ -1083,9 +1084,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
-  feed: { 
+  feed: {
     paddingHorizontal: 20,
-    paddingBottom: 40, 
+    paddingBottom: 40,
   },
   listHeader: {
     marginBottom: 16,
@@ -1266,41 +1267,41 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
   },
-  postHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginBottom: 16 
+  postHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16
   },
-  avatarPlaceholder: { 
-    width: 48, 
-    height: 48, 
-    borderRadius: 24, 
-    alignItems: 'center', 
-    justifyContent: 'center', 
+  avatarPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 14,
     backgroundColor: '#ff6b81'
   },
-  avatarLetter: { 
-    color: '#ffffff', 
-    fontWeight: 'bold', 
-    fontSize: 20 
+  avatarLetter: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+    fontSize: 20
   },
-  postAuthor: { 
-    fontWeight: 'bold', 
-    fontSize: 17, 
+  postAuthor: {
+    fontWeight: 'bold',
+    fontSize: 17,
     color: '#1a1a1a',
     marginBottom: 2,
   },
-  postTime: { 
-    fontSize: 13, 
-    color: '#888' 
+  postTime: {
+    fontSize: 13,
+    color: '#888'
   },
   deletePostBtn: {
     padding: 8,
   },
-  postText: { 
-    fontSize: 16, 
-    color: '#444', 
+  postText: {
+    fontSize: 16,
+    color: '#444',
     lineHeight: 24,
     marginBottom: 12
   },

@@ -53,6 +53,8 @@
       "expo-asset",
       "expo-secure-store",
       "expo-location",
+      "expo-notifications",
+      "react-native-agora",
       [
         "react-native-widget-extension",
         {

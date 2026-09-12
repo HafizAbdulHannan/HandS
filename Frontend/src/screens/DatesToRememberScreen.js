@@ -10,7 +10,15 @@ import * as DocumentPicker from 'expo-document-picker';
 import { createAudioPlayer } from 'expo-audio';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
+import * as Notifications from 'expo-notifications';
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 export default function DatesToRememberScreen() {
   const { theme } = useThemeContext();
   const { user } = useAuth();
@@ -35,10 +43,42 @@ export default function DatesToRememberScreen() {
 
   useEffect(() => {
     fetchDates();
+    
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      const { customSoundUrl, dateId } = response.notification.request.content.data;
+      if (customSoundUrl) {
+         playSound(customSoundUrl, dateId);
+      }
+      
+      if (dateId) {
+        setTimeout(() => {
+          Alert.alert(
+            "Reminder", 
+            "Would you like to keep this reminder or delete it?",
+            [
+              { text: "Keep", style: "cancel" },
+              { 
+                 text: "Delete", 
+                 style: "destructive",
+                 onPress: async () => {
+                   try {
+                     await axiosInstance.delete(`/dates/${dateId}`);
+                     fetchDates();
+                     Toast.show({ type: 'success', text1: 'Deleted', text2: 'Date deleted' });
+                   } catch (e) {}
+                 }
+              }
+            ]
+          );
+        }, 1000);
+      }
+    });
+
     return () => {
       if (sound) {
         sound.remove();
       }
+      Notifications.removeNotificationSubscription(responseListener);
     };
   }, [sound]);
 
@@ -93,16 +133,31 @@ export default function DatesToRememberScreen() {
         });
 
         const uploadRes = await axiosInstance.post('/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
+          headers: { 'Accept': 'application/json' }
         });
         audioUrl = uploadRes.data;
       }
 
-      await axiosInstance.post('/dates', {
+      const response = await axiosInstance.post('/dates', {
         title,
         date,
         customSoundUrl: audioUrl
       });
+      
+      const savedDate = response.data;
+      
+      try {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "Date Reminder! ❤️",
+            body: `It's time for: ${title}`,
+            data: { customSoundUrl: audioUrl, dateId: savedDate._id || savedDate.id },
+          },
+          trigger: new Date(date),
+        });
+      } catch (e) {
+        console.log('Notification schedule failed', e);
+      }
 
       Toast.show({ type: 'success', text1: 'Success', text2: 'Date saved successfully!' });
       setModalVisible(false);
