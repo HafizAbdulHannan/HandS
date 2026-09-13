@@ -105,7 +105,7 @@ export default function DatesToRememberScreen() {
   const handlePickAudio = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'audio/*',
+        type: 'audio/mpeg', // Only allow .mp3
         copyToCacheDirectory: true,
       });
 
@@ -424,7 +424,7 @@ export default function DatesToRememberScreen() {
               </Text>
             </TouchableOpacity>
             <Text style={[styles.helpText, { color: theme.colors.textSecondary }]}>
-              This sound will play when you open the app on this date.
+              This sound will play when you open the app on this date. (Only .mp3 format supported)
             </Text>
           </View>
         </KeyboardAvoidingView>

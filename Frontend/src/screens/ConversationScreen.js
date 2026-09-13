@@ -110,11 +110,12 @@ export default function ConversationScreen() {
 
     // Upload audio
     if (uri) {
+      const ext = uri.split('.').pop() || 'm4a';
       const formData = new FormData();
       formData.append('media', {
         uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
-        name: 'voicenote.m4a',
-        type: 'audio/m4a'
+        name: `voicenote.${ext}`,
+        type: `audio/${ext === 'm4a' ? 'mp4' : ext}`
       });
       console.log('Sending voice note with formData:', formData);
       try {
