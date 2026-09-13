@@ -9,6 +9,7 @@ import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
 import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
 import * as SecureStore from 'expo-secure-store';
+import * as FileSystem from 'expo-file-system';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
 import * as Notifications from 'expo-notifications';
@@ -135,27 +136,24 @@ export default function DatesToRememberScreen() {
         const token = await SecureStore.getItemAsync('userToken');
         const audioUri = Platform.OS === 'ios' ? selectedAudio.uri.replace('file://', '') : selectedAudio.uri;
         
-        const formData = new FormData();
-        formData.append('media', {
-          uri: audioUri,
-          name: selectedAudio.name || 'audio.mp3',
-          type: selectedAudio.type || 'audio/mpeg',
-        });
+        // Copy to a temporary .mp3 file to ensure multer recognizes the extension
+        const tempUri = FileSystem.cacheDirectory + 'audio_upload_' + Date.now() + '.mp3';
+        await FileSystem.copyAsync({ from: audioUri, to: tempUri });
 
-        const uploadRes = await fetch(`${STATIC_URL}/api/upload`, {
-          method: 'POST',
-          body: formData,
+        const uploadRes = await FileSystem.uploadAsync(`${STATIC_URL}/api/upload`, tempUri, {
+          fieldName: 'media',
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
           headers: {
-            'Authorization': `Bearer ${token}`
-            // Do not set Content-Type, fetch will automatically set it with the correct boundary
+            Authorization: `Bearer ${token}`
           }
         });
         
-        if (!uploadRes.ok) {
+        if (uploadRes.status !== 200 && uploadRes.status !== 201) {
           throw new Error('Upload failed with status: ' + uploadRes.status);
         }
         
-        audioUrl = await uploadRes.text(); // backend returns string path directly
+        audioUrl = uploadRes.body; // backend returns string path directly
       }
 
       const response = await axiosInstance.post('/dates', {

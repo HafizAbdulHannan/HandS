@@ -12,9 +12,22 @@ import * as ImagePicker from 'expo-image-picker';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import FloatingEmojis from '../components/FloatingEmojis';
 import Toast from 'react-native-toast-message';
-import createAgoraRtcEngine, { ChannelProfileType, ClientRoleType, RtcSurfaceView } from 'react-native-agora';
-import { PermissionsAndroid } from 'react-native';
+import { PermissionsAndroid, NativeModules } from 'react-native';
 import Constants, { AppOwnership } from 'expo-constants';
+
+let createAgoraRtcEngine, ChannelProfileType, ClientRoleType, RtcSurfaceView;
+const isAgoraAvailable = !!NativeModules.AgoraRtcEngineModule;
+if (isAgoraAvailable) {
+  try {
+    const agora = require('react-native-agora');
+    createAgoraRtcEngine = agora.default;
+    ChannelProfileType = agora.ChannelProfileType;
+    ClientRoleType = agora.ClientRoleType;
+    RtcSurfaceView = agora.RtcSurfaceView;
+  } catch (e) {
+    console.warn("Failed to load react-native-agora dynamically:", e);
+  }
+}
 
 const AGORA_APP_ID = '32e0688e8a9840579f3282e75ea6a9ac';
 
@@ -93,6 +106,10 @@ const WatchRoomScreen = () => {
           const { NativeModules } = require('react-native');
           if (!NativeModules.AgoraRtcEngineModule) {
              console.warn("Agora Native Module is missing! Please rebuild the app with the correct EAS plugin.");
+             return;
+          }
+          if (!isAgoraAvailable || !createAgoraRtcEngine) {
+             console.warn("Agora native module is not available. Skipping initialization.");
              return;
           }
 
@@ -663,7 +680,7 @@ const WatchRoomScreen = () => {
                   <Ionicons name="desktop-outline" size={60} color={theme.colors.primary} />
                   <Text style={{ color: '#fff', marginTop: 10, fontSize: 16 }}>You are sharing your screen</Text>
                 </View>
-              ) : isEngineInitialized ? (
+              ) : isEngineInitialized && isAgoraAvailable && RtcSurfaceView ? (
                 <RtcSurfaceView canvas={{ uid: parseInt(mediaUrl) || 0 }} style={{ flex: 1 }} />
               ) : null}
             </View>
@@ -754,14 +771,23 @@ const WatchRoomScreen = () => {
         {(isVideoOn || remoteUids.length > 0) && isEngineInitialized && (
           <View style={[styles.videoCallContainer, { backgroundColor: theme.colors.card }]}>
             {remoteUids.length > 0 ? (
-              <View style={styles.mainVideoContainer}>
-                <RtcSurfaceView canvas={{ uid: remoteUids[0] }} style={styles.agoraVideoView} />
-                <View style={styles.localVideoLabel}>
-                  <Text style={styles.localVideoLabelText}>Partner</Text>
-                </View>
+              <View style={styles.agoraVideoContainer}>
+                {isEngineInitialized && isAgoraAvailable && RtcSurfaceView ? (
+                  <RtcSurfaceView canvas={{ uid: remoteUids[0] }} style={styles.agoraVideoView} />
+                ) : (
+                  <View style={[styles.agoraVideoView, { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Ionicons name="person" size={40} color="#666" />
+                  </View>
+                )}
                 {isVideoOn && (
                   <View style={[styles.pipVideoContainer, { borderColor: theme.colors.primary }]}>
-                    <RtcSurfaceView canvas={{ uid: 0 }} style={styles.agoraVideoView} />
+                    {isEngineInitialized && isAgoraAvailable && RtcSurfaceView ? (
+                      <RtcSurfaceView canvas={{ uid: 0 }} style={styles.agoraVideoView} />
+                    ) : (
+                      <View style={[styles.agoraVideoView, { backgroundColor: '#444', justifyContent: 'center', alignItems: 'center' }]}>
+                        <Ionicons name="videocam-off" size={30} color="#777" />
+                      </View>
+                    )}
                   </View>
                 )}
               </View>
@@ -769,7 +795,13 @@ const WatchRoomScreen = () => {
               <View style={styles.mainVideoContainer}>
                 {isVideoOn ? (
                   <>
-                    <RtcSurfaceView canvas={{ uid: 0 }} style={styles.agoraVideoView} />
+                    {isEngineInitialized && isAgoraAvailable && RtcSurfaceView ? (
+                      <RtcSurfaceView canvas={{ uid: 0 }} style={styles.agoraVideoView} />
+                    ) : (
+                      <View style={[styles.agoraVideoView, { backgroundColor: '#444', justifyContent: 'center', alignItems: 'center' }]}>
+                        <Ionicons name="videocam-off" size={30} color="#777" />
+                      </View>
+                    )}
                     <View style={styles.localVideoLabel}>
                       <Text style={styles.localVideoLabelText}>You (Waiting for partner)</Text>
                     </View>
