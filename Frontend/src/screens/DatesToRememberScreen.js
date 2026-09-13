@@ -133,27 +133,20 @@ export default function DatesToRememberScreen() {
       let audioUrl = '';
 
       if (selectedAudio) {
-        const token = await SecureStore.getItemAsync('userToken');
-        const audioUri = Platform.OS === 'ios' ? selectedAudio.uri.replace('file://', '') : selectedAudio.uri;
+        const fileUri = Platform.OS === 'ios' ? selectedAudio.uri.replace('file://', '') : selectedAudio.uri;
         
-        // Copy to a temporary .mp3 file to ensure multer recognizes the extension
-        const tempUri = FileSystem.cacheDirectory + 'audio_upload_' + Date.now() + '.mp3';
-        await FileSystem.copyAsync({ from: audioUri, to: tempUri });
+        const formData = new FormData();
+        formData.append('media', {
+          uri: fileUri,
+          name: 'audio_upload.mp3', // Force .mp3 extension for backend multer check
+          type: 'audio/mpeg'
+        });
 
-        const uploadRes = await FileSystem.uploadAsync(`${STATIC_URL}/api/upload`, tempUri, {
-          fieldName: 'media',
-          httpMethod: 'POST',
-          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
+        const uploadRes = await axiosInstance.post('/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
         });
         
-        if (uploadRes.status !== 200 && uploadRes.status !== 201) {
-          throw new Error('Upload failed with status: ' + uploadRes.status);
-        }
-        
-        audioUrl = uploadRes.body; // backend returns string path directly
+        audioUrl = uploadRes.data; // backend returns string path directly
       }
 
       const response = await axiosInstance.post('/dates', {

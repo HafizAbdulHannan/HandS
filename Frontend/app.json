@@ -72,6 +72,14 @@
           "widgetPath": "widgets",
           "bundleIdentifier": "com.hafizabdulhannan.frontend.widget"
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 24
+          }
+        }
       ]
     ],
     "extra": {

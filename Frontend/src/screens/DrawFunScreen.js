@@ -240,6 +240,7 @@ export default function DrawFunScreen() {
                 pointerEvents={(toolMode === 'draw' || toolMode === 'eraser') ? 'auto' : 'none'}
                 style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: 'transparent' }]} 
                 onStartShouldSetResponder={() => true}
+                onMoveShouldSetResponder={() => true}
                 onResponderGrant={handleTouchStart}
                 onResponderMove={handleTouchMove}
                 onResponderRelease={handleTouchEnd}
