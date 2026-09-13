@@ -414,7 +414,7 @@ const WatchRoomScreen = () => {
         });
 
         const res = await axiosInstance.post('/upload', formData, {
-          headers: { 'Accept': 'application/json' },
+          headers: { 'Content-Type': 'multipart/form-data', 'Accept': 'application/json' },
           onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
             setUploadProgress(percentCompleted);
@@ -424,7 +424,7 @@ const WatchRoomScreen = () => {
           }
         });
 
-        const uploadedUrl = res.data;
+        const uploadedUrl = res.data.url;
         setUploadProgress(0);
         if (socket) {
           socket.emit('media_uploading', { roomCode, progress: 100 });

@@ -125,7 +125,7 @@ export default function ConversationScreen() {
           }
         });
         console.log('Voice note uploaded successfully:', uploadRes.data);
-        await sendMessage({ audioUrl: uploadRes.data });
+        await sendMessage({ audioUrl: uploadRes.data.url });
       } catch (err) {
         console.error('Failed to upload audio', err);
         Toast.show({ type: 'error', text1: 'Upload Failed', text2: 'Could not send voice note.' });

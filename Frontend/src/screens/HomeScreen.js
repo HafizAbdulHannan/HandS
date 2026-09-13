@@ -354,7 +354,7 @@ export default function HomeScreen({ route }) {
           const uploadResponse = await axiosInstance.post('/upload', formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
           });
-          mediaUrl = uploadResponse.data;
+          mediaUrl = uploadResponse.data.url;
         }
       }
 

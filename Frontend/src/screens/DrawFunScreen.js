@@ -46,6 +46,20 @@ export default function DrawFunScreen() {
     toolModeRef.current = toolMode;
   }, [toolMode]);
 
+  const handleUndo = () => {
+    if (paths.length > 0) {
+      const newPaths = [...paths];
+      const undone = newPaths.pop();
+      setPaths(newPaths);
+      setRedoPaths([...redoPaths, undone]);
+    } else if (placedElements.length > 0) {
+      const newElements = [...placedElements];
+      const undone = newElements.pop();
+      setPlacedElements(newElements);
+      setRedoElements([...redoElements, undone]);
+    }
+  };
+
   const handleTouchStart = (evt) => {
     if (toolModeRef.current !== 'draw' && toolModeRef.current !== 'eraser') return;
     const { locationX, locationY } = evt.nativeEvent;
@@ -159,7 +173,7 @@ export default function DrawFunScreen() {
       const uploadRes = await axiosInstance.post('/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      const finalUrl = uploadRes.data;
+      const finalUrl = uploadRes.data.url;
 
       await axiosInstance.post('/posts', {
         content: 'Check out my drawing! 🎨',
@@ -182,9 +196,14 @@ export default function DrawFunScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
         {/* Header */}
       <View style={[styles.header, { zIndex: 10 }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
-          <Ionicons name="close" size={28} color="#fff" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
+            <Ionicons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleUndo} style={styles.iconBtn}>
+            <Ionicons name="arrow-undo" size={28} color="#fff" />
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity onPress={handlePost} style={styles.postBtn} disabled={isPosting}>
           {isPosting ? <ActivityIndicator color="#fff" /> : <Text style={styles.postText}>Post</Text>}
         </TouchableOpacity>
