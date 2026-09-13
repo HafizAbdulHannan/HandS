@@ -75,10 +75,10 @@ export default function DrawFunScreen() {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => toolModeRef.current === 'draw' || toolModeRef.current === 'eraser',
-      onMoveShouldSetPanResponder: () => toolModeRef.current === 'draw' || toolModeRef.current === 'eraser',
-      onStartShouldSetPanResponderCapture: () => toolModeRef.current === 'draw' || toolModeRef.current === 'eraser',
-      onMoveShouldSetPanResponderCapture: () => toolModeRef.current === 'draw' || toolModeRef.current === 'eraser',
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: handlePanResponderGrant,
       onPanResponderMove: handlePanResponderMove,
       onPanResponderRelease: handlePanResponderRelease,
@@ -250,7 +250,7 @@ export default function DrawFunScreen() {
 
             {(toolMode === 'draw' || toolMode === 'eraser') && (
               <View 
-                style={[StyleSheet.absoluteFill, { zIndex: 9999 }]} 
+                style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: 'rgba(255, 255, 255, 0.01)' }]} 
                 {...panResponder.panHandlers} 
                 collapsable={false}
               />

@@ -59,7 +59,7 @@ export const SocketProvider = ({ children }) => {
     // Listen for Heartbeat
     newSocket.on('receive_heartbeat', () => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      Vibration.vibrate([0, 100, 100, 100, 100, 100]); // Heartbeat-like vibration
+      Vibration.vibrate([0, 150, 150, 150, 1000, 150, 150, 150]); // Heartbeat-like vibration
       setAnimationType('heartbeat');
       setTimeout(() => setAnimationType(null), 3000);
     });
@@ -103,6 +103,18 @@ export const SocketProvider = ({ children }) => {
     }
   };
 
+  const sendHeartbeat = () => {
+    if (socket && userId && partnerId) {
+      const room = [userId, partnerId].sort().join('_');
+      socket.emit('send_heartbeat', { room });
+      // Visual feedback for sender
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      Vibration.vibrate([0, 150, 150, 150, 1000, 150, 150, 150]);
+      setAnimationType('heartbeat');
+      setTimeout(() => setAnimationType(null), 3000);
+    }
+  };
+
   const sendNotification = (title, message) => {
     if (socket && userId && partnerId) {
       const room = [userId, partnerId].sort().join('_');
@@ -111,7 +123,7 @@ export const SocketProvider = ({ children }) => {
   };
 
   return (
-    <SocketContext.Provider value={{ socket, sendMissYou, sendLoveYou, sendNotification, animationType }}>
+    <SocketContext.Provider value={{ socket, sendMissYou, sendLoveYou, sendHeartbeat, sendNotification, animationType }}>
       {children}
     </SocketContext.Provider>
   );

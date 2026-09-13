@@ -7,7 +7,7 @@ import { useThemeContext } from '../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
 import * as DocumentPicker from 'expo-document-picker';
-import { createAudioPlayer } from 'expo-audio';
+import { Audio } from 'expo-av';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
 import * as Notifications from 'expo-notifications';
@@ -76,7 +76,7 @@ export default function DatesToRememberScreen() {
 
     return () => {
       if (sound) {
-        sound.remove();
+        sound.unloadAsync();
       }
       Notifications.removeNotificationSubscription(responseListener);
     };
@@ -128,12 +128,15 @@ export default function DatesToRememberScreen() {
         const formData = new FormData();
         formData.append('media', {
           uri: Platform.OS === 'ios' ? selectedAudio.uri.replace('file://', '') : selectedAudio.uri,
-          name: selectedAudio.name,
-          type: selectedAudio.type,
+          name: selectedAudio.name || 'audio.mp3',
+          type: selectedAudio.type || 'audio/mpeg',
         });
 
         const uploadRes = await axiosInstance.post('/upload', formData, {
-          headers: { 'Accept': 'application/json' }
+          headers: { 
+            'Accept': 'application/json',
+            'Content-Type': 'multipart/form-data'
+          }
         });
         audioUrl = uploadRes.data;
       }
@@ -202,7 +205,7 @@ export default function DatesToRememberScreen() {
 
     if (isPlaying && playingId === id) {
       // Stop playing
-      sound?.pause();
+      await sound?.pauseAsync();
       setIsPlaying(false);
       setPlayingId(null);
       return;
@@ -210,22 +213,23 @@ export default function DatesToRememberScreen() {
 
     try {
       if (sound) {
-        sound.pause();
-        sound.remove();
+        await sound.unloadAsync();
       }
 
-      const newSound = createAudioPlayer({ uri: `${STATIC_URL}${audioUrl}` });
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: `${STATIC_URL}${audioUrl}` },
+        { shouldPlay: true }
+      );
       
       setSound(newSound);
       setIsPlaying(true);
       setPlayingId(id);
 
-      newSound.play();
-
-      newSound.addListener('playbackStatusUpdate', (status) => {
+      newSound.setOnPlaybackStatusUpdate((status) => {
         if (status.didJustFinish) {
           setIsPlaying(false);
           setPlayingId(null);
+          newSound.unloadAsync();
         }
       });
     } catch (error) {

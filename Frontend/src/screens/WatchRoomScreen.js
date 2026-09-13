@@ -14,6 +14,7 @@ import FloatingEmojis from '../components/FloatingEmojis';
 import Toast from 'react-native-toast-message';
 import createAgoraRtcEngine, { ChannelProfileType, ClientRoleType, RtcSurfaceView } from 'react-native-agora';
 import { PermissionsAndroid } from 'react-native';
+import Constants, { AppOwnership } from 'expo-constants';
 
 const AGORA_APP_ID = '32e0688e8a9840579f3282e75ea6a9ac';
 
@@ -83,11 +84,17 @@ const WatchRoomScreen = () => {
           }
         }
 
-        agoraEngineRef.current = createAgoraRtcEngine();
-        const agoraEngine = agoraEngineRef.current;
-        agoraEngine.initialize({ appId: AGORA_APP_ID });
-        
-        agoraEngine.registerEventHandler({
+        try {
+          if (Constants.appOwnership === AppOwnership.expo || Constants.executionEnvironment === 'storeClient') {
+             console.warn("Agora native module is not available in Expo Go. Skipping initialization.");
+             return;
+          }
+
+          const engine = createAgoraRtcEngine();
+          engine.initialize({ appId: AGORA_APP_ID });
+          agoraEngineRef.current = engine;
+          
+          engine.registerEventHandler({
           onJoinChannelSuccess: (connection) => {
             setIsJoined(true);
             setLocalUid(connection.localUid);
@@ -103,30 +110,37 @@ const WatchRoomScreen = () => {
           },
         });
 
-        agoraEngine.enableVideo();
-        agoraEngine.enableAudio();
-        // Start muted & video off
-        agoraEngine.muteLocalAudioStream(true);
-        agoraEngine.muteLocalVideoStream(true);
+          engine.enableVideo();
+          engine.enableAudio();
+          // Start muted & video off
+          engine.muteLocalAudioStream(true);
+          engine.muteLocalVideoStream(true);
 
-        agoraEngine.joinChannel('', roomCode, 0, {
-          channelProfile: ChannelProfileType.ChannelProfileCommunication,
-          clientRoleType: ClientRoleType.ClientRoleBroadcaster,
-        });
-        
-        setIsEngineInitialized(true);
+          engine.joinChannel('', roomCode, 0, {
+            channelProfile: ChannelProfileType.ChannelProfileCommunication,
+            clientRoleType: ClientRoleType.ClientRoleBroadcaster,
+          });
+          
+          setIsEngineInitialized(true);
+        } catch (engineError) {
+          console.warn('Agora engine failed to initialize (Missing Native Modules?):', engineError);
+        }
       } catch (e) {
-        console.error('Failed to initialize Agora:', e);
+        console.error('Failed to setup Agora permissions/environment:', e);
       }
     };
 
     setupAgora();
 
     return () => {
-      if (agoraEngineRef.current) {
-        agoraEngineRef.current.leaveChannel();
-        agoraEngineRef.current.removeAllListeners();
-        agoraEngineRef.current.release();
+      if (agoraEngineRef.current && isEngineInitialized) {
+        try {
+          agoraEngineRef.current.leaveChannel();
+          agoraEngineRef.current.removeAllListeners();
+          agoraEngineRef.current.release();
+        } catch (e) {
+          console.warn('Error releasing Agora engine', e);
+        }
       }
     };
   }, [roomCode]);
