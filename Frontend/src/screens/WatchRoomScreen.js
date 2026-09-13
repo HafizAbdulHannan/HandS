@@ -72,10 +72,14 @@ const WatchRoomScreen = () => {
     const setupAgora = async () => {
       try {
         if (Platform.OS === 'android') {
-          const granted = await PermissionsAndroid.requestMultiple([
+          const permissions = [
             PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
             PermissionsAndroid.PERMISSIONS.CAMERA,
-          ]);
+          ];
+          if (Platform.Version >= 31) {
+            permissions.push(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
+          }
+          const granted = await PermissionsAndroid.requestMultiple(permissions);
           if (
             granted['android.permission.RECORD_AUDIO'] !== PermissionsAndroid.RESULTS.GRANTED ||
             granted['android.permission.CAMERA'] !== PermissionsAndroid.RESULTS.GRANTED

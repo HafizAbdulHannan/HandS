@@ -8,6 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
 import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
+import * as SecureStore from 'expo-secure-store';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
 import * as Notifications from 'expo-notifications';
@@ -134,15 +135,27 @@ export default function DatesToRememberScreen() {
         const token = await SecureStore.getItemAsync('userToken');
         const audioUri = Platform.OS === 'ios' ? selectedAudio.uri.replace('file://', '') : selectedAudio.uri;
         
-        const uploadRes = await FileSystem.uploadAsync(`${STATIC_URL}/api/upload`, audioUri, {
-          fieldName: 'media',
-          httpMethod: 'POST',
-          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        const formData = new FormData();
+        formData.append('media', {
+          uri: audioUri,
+          name: selectedAudio.name || 'audio.mp3',
+          type: selectedAudio.type || 'audio/mpeg',
+        });
+
+        const uploadRes = await fetch(`${STATIC_URL}/api/upload`, {
+          method: 'POST',
+          body: formData,
           headers: {
-            Authorization: `Bearer ${token}`
+            'Authorization': `Bearer ${token}`
+            // Do not set Content-Type, fetch will automatically set it with the correct boundary
           }
         });
-        audioUrl = uploadRes.body; // backend returns string path directly
+        
+        if (!uploadRes.ok) {
+          throw new Error('Upload failed with status: ' + uploadRes.status);
+        }
+        
+        audioUrl = await uploadRes.text(); // backend returns string path directly
       }
 
       const response = await axiosInstance.post('/dates', {
