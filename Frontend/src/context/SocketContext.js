@@ -58,8 +58,7 @@ export const SocketProvider = ({ children }) => {
 
     // Listen for Heartbeat
     newSocket.on('receive_heartbeat', () => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      Vibration.vibrate([0, 150, 150, 150, 1000, 150, 150, 150]); // Heartbeat-like vibration
+      Vibration.vibrate([0, 300, 150, 300]); // Strong heartbeat vibration
       setAnimationType('heartbeat');
       setTimeout(() => setAnimationType(null), 3000);
     });
@@ -108,8 +107,7 @@ export const SocketProvider = ({ children }) => {
       const room = [userId, partnerId].sort().join('_');
       socket.emit('send_heartbeat', { room });
       // Visual feedback for sender
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      Vibration.vibrate([0, 150, 150, 150, 1000, 150, 150, 150]);
+      Vibration.vibrate([0, 300, 150, 300]);
       setAnimationType('heartbeat');
       setTimeout(() => setAnimationType(null), 3000);
     }

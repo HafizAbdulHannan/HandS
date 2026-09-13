@@ -131,20 +131,18 @@ export default function DatesToRememberScreen() {
       let audioUrl = '';
 
       if (selectedAudio) {
-        const formData = new FormData();
-        formData.append('media', {
-          uri: Platform.OS === 'ios' ? selectedAudio.uri.replace('file://', '') : selectedAudio.uri,
-          name: selectedAudio.name || 'audio.mp3',
-          type: selectedAudio.type || 'audio/mpeg',
+        const token = await SecureStore.getItemAsync('userToken');
+        const audioUri = Platform.OS === 'ios' ? selectedAudio.uri.replace('file://', '') : selectedAudio.uri;
+        
+        const uploadRes = await FileSystem.uploadAsync(`${STATIC_URL}/api/upload`, audioUri, {
+          fieldName: 'media',
+          httpMethod: 'POST',
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         });
-
-        const uploadRes = await axiosInstance.post('/upload', formData, {
-          headers: { 
-            'Accept': 'application/json',
-          },
-          transformRequest: () => formData, // Bypass Axios default transform for FormData
-        });
-        audioUrl = uploadRes.data;
+        audioUrl = uploadRes.body; // backend returns string path directly
       }
 
       const response = await axiosInstance.post('/dates', {

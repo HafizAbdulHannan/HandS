@@ -238,10 +238,11 @@ export default function DrawFunScreen() {
 
               <View 
                 pointerEvents={(toolMode === 'draw' || toolMode === 'eraser') ? 'auto' : 'none'}
-                style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: 'rgba(255, 255, 255, 0.01)' }]} 
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
+                style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: 'transparent' }]} 
+                onStartShouldSetResponder={() => true}
+                onResponderGrant={handleTouchStart}
+                onResponderMove={handleTouchMove}
+                onResponderRelease={handleTouchEnd}
                 collapsable={false}
               />
           </View>

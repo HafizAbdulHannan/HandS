@@ -85,7 +85,14 @@ const WatchRoomScreen = () => {
         }
 
         try {
-          if (Constants.appOwnership === AppOwnership.expo || Constants.executionEnvironment === 'storeClient') {
+          // Prevent fatal JVM crash on Android by ensuring the native module is actually linked
+          const { NativeModules } = require('react-native');
+          if (!NativeModules.AgoraRtcEngineModule) {
+             console.warn("Agora Native Module is missing! Please rebuild the app with the correct EAS plugin.");
+             return;
+          }
+
+          if (Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient') {
              console.warn("Agora native module is not available in Expo Go. Skipping initialization.");
              return;
           }
