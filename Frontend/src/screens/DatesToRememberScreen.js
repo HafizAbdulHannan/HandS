@@ -133,8 +133,17 @@ export default function DatesToRememberScreen() {
       let audioUrl = '';
 
       if (selectedAudio) {
-        const fileUri = Platform.OS === 'ios' ? selectedAudio.uri.replace('file://', '') : selectedAudio.uri;
+        let fileUri = selectedAudio.uri;
         
+        // Android DocumentPicker returns content:// URIs. Copy to local file:// to ensure FormData handles it correctly.
+        if (Platform.OS === 'android' && fileUri.startsWith('content://')) {
+          const tempUri = FileSystem.cacheDirectory + 'temp_audio_' + Date.now() + '.mp3';
+          await FileSystem.copyAsync({ from: fileUri, to: tempUri });
+          fileUri = tempUri;
+        } else if (Platform.OS === 'ios') {
+          fileUri = fileUri.replace('file://', '');
+        }
+
         const formData = new FormData();
         formData.append('media', {
           uri: fileUri,
@@ -143,7 +152,7 @@ export default function DatesToRememberScreen() {
         });
 
         const uploadRes = await axiosInstance.post('/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
+          headers: { 'Accept': 'application/json', 'Content-Type': 'multipart/form-data' }
         });
         
         audioUrl = uploadRes.data; // backend returns string path directly
