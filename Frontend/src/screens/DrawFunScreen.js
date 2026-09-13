@@ -46,7 +46,7 @@ export default function DrawFunScreen() {
     toolModeRef.current = toolMode;
   }, [toolMode]);
 
-  const handlePanResponderGrant = (evt) => {
+  const handleTouchStart = (evt) => {
     if (toolModeRef.current !== 'draw' && toolModeRef.current !== 'eraser') return;
     const { locationX, locationY } = evt.nativeEvent;
     setCurrentPath({
@@ -56,7 +56,7 @@ export default function DrawFunScreen() {
     });
   };
 
-  const handlePanResponderMove = (evt) => {
+  const handleTouchMove = (evt) => {
     if ((toolModeRef.current !== 'draw' && toolModeRef.current !== 'eraser') || !currentPath) return;
     const { locationX, locationY } = evt.nativeEvent;
     setCurrentPath((prev) => ({
@@ -65,25 +65,13 @@ export default function DrawFunScreen() {
     }));
   };
 
-  const handlePanResponderRelease = () => {
+  const handleTouchEnd = () => {
     if (currentPath) {
       setPaths([...paths, currentPath]);
       setRedoPaths([]); // Clear redo stack on new action
       setCurrentPath(null);
     }
   };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
-      onMoveShouldSetPanResponderCapture: () => true,
-      onPanResponderGrant: handlePanResponderGrant,
-      onPanResponderMove: handlePanResponderMove,
-      onPanResponderRelease: handlePanResponderRelease,
-    })
-  ).current;
 
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -248,13 +236,14 @@ export default function DrawFunScreen() {
               return null;
             })}
 
-            {(toolMode === 'draw' || toolMode === 'eraser') && (
               <View 
+                pointerEvents={(toolMode === 'draw' || toolMode === 'eraser') ? 'auto' : 'none'}
                 style={[StyleSheet.absoluteFill, { zIndex: 9999, backgroundColor: 'rgba(255, 255, 255, 0.01)' }]} 
-                {...panResponder.panHandlers} 
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
                 collapsable={false}
               />
-            )}
           </View>
         </ViewShot>
       </View>

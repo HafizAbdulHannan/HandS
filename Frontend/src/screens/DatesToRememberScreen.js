@@ -78,7 +78,13 @@ export default function DatesToRememberScreen() {
       if (sound) {
         sound.unloadAsync();
       }
-      Notifications.removeNotificationSubscription(responseListener);
+      if (responseListener) {
+        try {
+          responseListener.remove();
+        } catch (e) {
+          Notifications.removeNotificationSubscription(responseListener);
+        }
+      }
     };
   }, [sound]);
 
@@ -135,8 +141,8 @@ export default function DatesToRememberScreen() {
         const uploadRes = await axiosInstance.post('/upload', formData, {
           headers: { 
             'Accept': 'application/json',
-            'Content-Type': 'multipart/form-data'
-          }
+          },
+          transformRequest: () => formData, // Bypass Axios default transform for FormData
         });
         audioUrl = uploadRes.data;
       }
