@@ -152,7 +152,7 @@ export default function DatesToRememberScreen() {
         });
 
         const uploadRes = await axiosInstance.post('/upload', formData, {
-          headers: { 'Accept': 'application/json', 'Content-Type': 'multipart/form-data' }
+          headers: { 'Accept': 'application/json' }
         });
         
         audioUrl = uploadRes.data.url; // parse from JSON

@@ -414,7 +414,7 @@ const WatchRoomScreen = () => {
         });
 
         const res = await axiosInstance.post('/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data', 'Accept': 'application/json' },
+          headers: { 'Accept': 'application/json' },
           onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
             setUploadProgress(percentCompleted);

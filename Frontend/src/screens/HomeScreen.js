@@ -351,9 +351,7 @@ export default function HomeScreen({ route }) {
             type: selectedMedia.mimeType,
           });
 
-          const uploadResponse = await axiosInstance.post('/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-          });
+          const uploadResponse = await axiosInstance.post('/upload', formData);
           mediaUrl = uploadResponse.data.url;
         }
       }

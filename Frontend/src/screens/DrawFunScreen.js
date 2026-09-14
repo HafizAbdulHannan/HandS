@@ -170,9 +170,7 @@ export default function DrawFunScreen() {
         type: 'image/jpeg'
       });
 
-      const uploadRes = await axiosInstance.post('/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const uploadRes = await axiosInstance.post('/upload', formData);
       const finalUrl = uploadRes.data.url;
 
       await axiosInstance.post('/posts', {
