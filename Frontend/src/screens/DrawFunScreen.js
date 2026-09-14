@@ -162,7 +162,13 @@ export default function DrawFunScreen() {
 
     setIsPosting(true);
     try {
-      const uri = await viewShotRef.current.capture();
+      let uri = await viewShotRef.current.capture();
+      
+      // Ensure Android URI has file:// prefix
+      if (Platform.OS === 'android' && !uri.startsWith('file://') && !uri.startsWith('content://')) {
+        uri = `file://${uri}`;
+      }
+
       const formData = new FormData();
       formData.append('media', {
         uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
