@@ -89,7 +89,7 @@ const WatchRoomScreen = () => {
             PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
             PermissionsAndroid.PERMISSIONS.CAMERA,
           ];
-          if (Platform.Version >= 31) {
+          if (Platform.Version >= 31 && PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) {
             permissions.push(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
           }
           const granted = await PermissionsAndroid.requestMultiple(permissions);
@@ -98,6 +98,8 @@ const WatchRoomScreen = () => {
             granted['android.permission.CAMERA'] !== PermissionsAndroid.RESULTS.GRANTED
           ) {
             console.warn('Permissions not granted');
+            Toast.show({ type: 'error', text1: 'Permissions Required', text2: 'Please grant camera and mic permissions to join the room.' });
+            return;
           }
         }
 
@@ -145,8 +147,8 @@ const WatchRoomScreen = () => {
           engine.muteLocalVideoStream(true);
 
           engine.joinChannel('', roomCode, 0, {
-            channelProfile: ChannelProfileType.ChannelProfileCommunication,
-            clientRoleType: ClientRoleType.ClientRoleBroadcaster,
+            channelProfile: 0, // ChannelProfileCommunication
+            clientRoleType: 1, // ClientRoleBroadcaster
           });
           
           setIsEngineInitialized(true);
