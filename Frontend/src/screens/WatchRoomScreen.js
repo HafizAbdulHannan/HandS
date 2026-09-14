@@ -67,7 +67,8 @@ const WatchRoomScreen = () => {
   const playerRef = useRef(null);
   const reactionTimeoutRef = useRef(null);
 
-  const videoPlayer = useVideoPlayer(mediaUrl || null, player => {
+  const dummySource = 'https://www.w3schools.com/html/mov_bbb.mp4';
+  const videoPlayer = useVideoPlayer(mediaUrl || dummySource, player => {
     player.loop = true;
   });
   
