@@ -58,12 +58,8 @@ export const SocketProvider = ({ children }) => {
 
     // Listen for Heartbeat
     newSocket.on('receive_heartbeat', () => {
-      // Use sequential standard vibrations instead of array pattern for max compatibility
-      try { Vibration.vibrate(100); } catch(e){}
-      setTimeout(() => { try { Vibration.vibrate(100); } catch(e){} }, 200);
-      
-      try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch (e) {}
-      setTimeout(() => { try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch (e) {} }, 200);
+      // Use standard pattern for heartbeat: 0ms wait, 150ms vibrate, 150ms wait, 150ms vibrate
+      Vibration.vibrate([0, 150, 150, 150]);
 
       setAnimationType('heartbeat');
       setTimeout(() => setAnimationType(null), 3000);
@@ -112,12 +108,8 @@ export const SocketProvider = ({ children }) => {
     if (socket && userId && partnerId) {
       const room = [userId, partnerId].sort().join('_');
       socket.emit('send_heartbeat', { room });
-      // Visual feedback for sender
-      try { Vibration.vibrate(100); } catch(e){}
-      setTimeout(() => { try { Vibration.vibrate(100); } catch(e){} }, 200);
-
-      try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch (e) {}
-      setTimeout(() => { try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch (e) {} }, 200);
+      // Visual & Haptic feedback for sender
+      Vibration.vibrate([0, 150, 150, 150]);
 
       setAnimationType('heartbeat');
       setTimeout(() => setAnimationType(null), 3000);
