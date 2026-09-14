@@ -186,8 +186,33 @@ io.on('connection', (socket) => {
     socket.to(room).emit('receive_message', message);
   });
 
-  socket.on('send_heartbeat', ({ room }) => {
-    socket.to(room).emit('receive_heartbeat');
+  socket.on('send_heartbeat', async ({ room, partnerId, senderId, senderName }) => {
+    socket.to(room).emit('receive_heartbeat', { timestamp: new Date() });
+    if (partnerId) {
+      try {
+        const partner = await User.findById(partnerId);
+        if (partner) {
+          // Save pending animation
+          partner.pendingAnimation = 'heartbeat';
+          await partner.save();
+
+          // Create notification in DB
+          if (senderId) {
+            await Notification.create({
+              recipient: partnerId,
+              sender: senderId,
+              title: `${senderName || 'Your partner'} sent a Heartbeat`,
+              message: 'Your partner is thinking of you!',
+              type: 'other'
+            });
+          }
+
+          if (partner.pushToken) {
+            await sendPushNotification(partner.pushToken, 'You have a new Notification', 'Your partner sent a Heartbeat!');
+          }
+        }
+      } catch (e) { console.error(e); }
+    }
   });
 
   // --- WATCH TOGETHER SOCKET EVENTS ---

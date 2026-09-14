@@ -21,12 +21,19 @@ const WatchLobbyScreen = () => {
     
     setLoading(true);
     try {
+      console.log('Sending request to /watch/create with roomName:', roomName);
       const response = await axiosInstance.post('/watch/create', { roomName });
-      const room = response.data.room;
+      const room = response?.data?.room;
+      
+      if (!room || !room.roomCode || !room._id) {
+        throw new Error('Invalid room data received from server');
+      }
+
+      console.log('Room created successfully, navigating to WatchRoom:', room.roomCode);
       navigation.navigate('WatchRoom', { roomCode: room.roomCode, roomId: room._id, isHost: true });
     } catch (error) {
-      console.error('Error creating room:', error);
-      Alert.alert('Error', 'Failed to create room. Try again.');
+      console.error('Error creating room:', error?.response?.data || error.message);
+      Alert.alert('Error', 'Failed to create room. ' + (error?.response?.data?.message || 'Try again.'));
     } finally {
       setLoading(false);
     }

@@ -105,7 +105,7 @@ export default function DatesToRememberScreen() {
   const handlePickAudio = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'audio/mpeg', // Only allow .mp3
+        type: 'audio/*', // Allow audio files
         copyToCacheDirectory: true,
       });
 
@@ -147,8 +147,8 @@ export default function DatesToRememberScreen() {
         const formData = new FormData();
         formData.append('media', {
           uri: fileUri,
-          name: 'audio_upload.mp3', // Force .mp3 extension for backend multer check
-          type: 'audio/mpeg'
+          name: selectedAudio.name || 'audio_upload.mp3',
+          type: selectedAudio.type || 'audio/mpeg'
         });
 
         // Use fetch instead of axios for FormData to ensure boundary is set correctly on Android

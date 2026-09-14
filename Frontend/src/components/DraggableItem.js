@@ -54,12 +54,13 @@ const DraggableItem = ({ children, initialX, initialY, zIndex = 100 }) => {
       ],
       position: 'absolute',
       zIndex,
+      padding: 20, // Add padding to make pinch easier
     };
   });
 
   return (
     <GestureDetector gesture={composedGesture}>
-      <Animated.View style={animatedStyle}>
+      <Animated.View style={animatedStyle} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
         {children}
       </Animated.View>
     </GestureDetector>

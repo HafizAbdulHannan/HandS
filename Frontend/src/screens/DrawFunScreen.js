@@ -11,7 +11,8 @@ import { useThemeContext } from '../context/ThemeContext';
 import Svg, { Path, Rect, Circle, Polygon } from 'react-native-svg';
 import ViewShot from 'react-native-view-shot';
 import * as ImagePicker from 'expo-image-picker';
-import axiosInstance from '../api/axiosConfig';
+import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
+import * as SecureStore from 'expo-secure-store';
 import Toast from 'react-native-toast-message';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import DraggableItem from '../components/DraggableItem';
@@ -177,8 +178,19 @@ export default function DrawFunScreen() {
         type: 'image/jpeg'
       });
 
-      const uploadRes = await axiosInstance.post('/upload', formData);
-      const finalUrl = uploadRes.data.url;
+      const token = await SecureStore.getItemAsync('userToken');
+      const uploadRes = await fetch(`${STATIC_URL}/api/upload`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!uploadRes.ok) throw new Error('Upload failed');
+      const uploadData = await uploadRes.json();
+      const finalUrl = uploadData.url;
 
       await axiosInstance.post('/posts', {
         content: 'Check out my drawing! 🎨',

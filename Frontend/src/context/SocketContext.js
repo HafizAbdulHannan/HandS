@@ -58,8 +58,8 @@ export const SocketProvider = ({ children }) => {
 
     // Listen for Heartbeat
     newSocket.on('receive_heartbeat', () => {
-      // Use standard single pulse for heartbeat to ensure all Android motors feel it
-      Vibration.vibrate(400);
+      Vibration.cancel();
+      Vibration.vibrate([0, 200, 100, 200]);
 
       setAnimationType('heartbeat');
       setTimeout(() => setAnimationType(null), 3000);
@@ -105,11 +105,15 @@ export const SocketProvider = ({ children }) => {
   };
 
   const sendHeartbeat = () => {
-    if (socket && userId && partnerId) {
+    if (socket && user?.partner) {
+      const partnerId = typeof user.partner === 'object' ? user.partner._id : user.partner;
+      const userId = user._id;
       const room = [userId, partnerId].sort().join('_');
-      socket.emit('send_heartbeat', { room });
+      socket.emit('send_heartbeat', { room, partnerId, senderId: userId, senderName: user?.fullName || user?.username });
+      
       // Visual & Haptic feedback for sender
-      Vibration.vibrate(400);
+      Vibration.cancel();
+      Vibration.vibrate([0, 200, 100, 200]);
 
       setAnimationType('heartbeat');
       setTimeout(() => setAnimationType(null), 3000);

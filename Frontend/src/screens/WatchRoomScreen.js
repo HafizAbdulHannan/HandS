@@ -61,6 +61,7 @@ const WatchRoomScreen = () => {
   const [isJoined, setIsJoined] = useState(false);
   const [localUid, setLocalUid] = useState(0);
   const [remoteUids, setRemoteUids] = useState([]);
+  const [isPermissionsGranted, setIsPermissionsGranted] = useState(false);
   const [isEngineInitialized, setIsEngineInitialized] = useState(false);
   const agoraEngineRef = useRef(null);
 
@@ -102,6 +103,9 @@ const WatchRoomScreen = () => {
             Toast.show({ type: 'error', text1: 'Permissions Required', text2: 'Please grant camera and mic permissions to join the room.' });
             return;
           }
+          setIsPermissionsGranted(true);
+        } else {
+          setIsPermissionsGranted(true);
         }
 
         try {
@@ -683,7 +687,7 @@ const WatchRoomScreen = () => {
                   <Ionicons name="desktop-outline" size={60} color={theme.colors.primary} />
                   <Text style={{ color: '#fff', marginTop: 10, fontSize: 16 }}>You are sharing your screen</Text>
                 </View>
-              ) : isEngineInitialized && isAgoraAvailable && RtcSurfaceView ? (
+              ) : isEngineInitialized && isPermissionsGranted && isAgoraAvailable && RtcSurfaceView ? (
                 <RtcSurfaceView canvas={{ uid: parseInt(mediaUrl) || 0 }} style={{ flex: 1 }} />
               ) : null}
             </View>
@@ -771,11 +775,11 @@ const WatchRoomScreen = () => {
         <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Live Video Call</Text>
         
         {/* WhatsApp-Style PIP Video Call Area */}
-        {(isVideoOn || remoteUids.length > 0) && isEngineInitialized && (
+        {(isVideoOn || remoteUids.length > 0) && isEngineInitialized && isPermissionsGranted && (
           <View style={[styles.videoCallContainer, { backgroundColor: theme.colors.card }]}>
             {remoteUids.length > 0 ? (
               <View style={styles.agoraVideoContainer}>
-                {isEngineInitialized && isAgoraAvailable && RtcSurfaceView ? (
+                {isEngineInitialized && isPermissionsGranted && isAgoraAvailable && RtcSurfaceView ? (
                   <RtcSurfaceView canvas={{ uid: remoteUids[0] }} style={styles.agoraVideoView} />
                 ) : (
                   <View style={[styles.agoraVideoView, { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' }]}>
@@ -784,7 +788,7 @@ const WatchRoomScreen = () => {
                 )}
                 {isVideoOn && (
                   <View style={[styles.pipVideoContainer, { borderColor: theme.colors.primary }]}>
-                    {isEngineInitialized && isAgoraAvailable && RtcSurfaceView ? (
+                    {isEngineInitialized && isPermissionsGranted && isAgoraAvailable && RtcSurfaceView ? (
                       <RtcSurfaceView canvas={{ uid: 0 }} style={styles.agoraVideoView} />
                     ) : (
                       <View style={[styles.agoraVideoView, { backgroundColor: '#444', justifyContent: 'center', alignItems: 'center' }]}>
@@ -798,11 +802,11 @@ const WatchRoomScreen = () => {
               <View style={styles.mainVideoContainer}>
                 {isVideoOn ? (
                   <>
-                    {isEngineInitialized && isAgoraAvailable && RtcSurfaceView ? (
+                    {isEngineInitialized && isPermissionsGranted && isAgoraAvailable && RtcSurfaceView ? (
                       <RtcSurfaceView canvas={{ uid: 0 }} style={styles.agoraVideoView} />
                     ) : (
-                      <View style={[styles.agoraVideoView, { backgroundColor: '#444', justifyContent: 'center', alignItems: 'center' }]}>
-                        <Ionicons name="videocam-off" size={30} color="#777" />
+                      <View style={[styles.agoraVideoView, { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' }]}>
+                        <Ionicons name="videocam" size={40} color="#666" />
                       </View>
                     )}
                     <View style={styles.localVideoLabel}>
