@@ -58,8 +58,15 @@ export const SocketProvider = ({ children }) => {
 
     // Listen for Heartbeat
     newSocket.on('receive_heartbeat', () => {
-      Vibration.cancel();
-      Vibration.vibrate([0, 200, 100, 200]);
+      console.log('Heartbeat Socket Received');
+      try {
+        Vibration.cancel();
+        Vibration.vibrate([0, 200, 100, 200]);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); // Fallback haptics
+      } catch (err) {
+        console.error('Vibration failed', err);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }
 
       setAnimationType('heartbeat');
       setTimeout(() => setAnimationType(null), 3000);

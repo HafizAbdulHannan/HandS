@@ -14,13 +14,13 @@ const WatchLobbyScreen = () => {
   const { theme } = useThemeContext();
 
   const handleCreateRoom = async () => {
-    if (!roomName.trim()) {
-      Alert.alert('Error', 'Please enter a room name');
-      return;
-    }
-    
-    setLoading(true);
     try {
+      if (!roomName.trim()) {
+        Alert.alert('Error', 'Please enter a room name');
+        return;
+      }
+      
+      setLoading(true);
       console.log('Sending request to /watch/create with roomName:', roomName);
       const response = await axiosInstance.post('/watch/create', { roomName });
       const room = response?.data?.room;
@@ -32,8 +32,8 @@ const WatchLobbyScreen = () => {
       console.log('Room created successfully, navigating to WatchRoom:', room.roomCode);
       navigation.navigate('WatchRoom', { roomCode: room.roomCode, roomId: room._id, isHost: true });
     } catch (error) {
-      console.error('Error creating room:', error?.response?.data || error.message);
-      Alert.alert('Error', 'Failed to create room. ' + (error?.response?.data?.message || 'Try again.'));
+      console.error('Crash Error in handleCreateRoom:', error);
+      Alert.alert('Crash Error', error.message || 'An unexpected error occurred during room creation');
     } finally {
       setLoading(false);
     }

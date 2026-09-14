@@ -145,10 +145,10 @@ export default function DatesToRememberScreen() {
         }
 
         const formData = new FormData();
-        formData.append('media', {
+        formData.append('audio', {
           uri: fileUri,
-          name: selectedAudio.name || 'audio_upload.mp3',
-          type: selectedAudio.type || 'audio/mpeg'
+          name: 'audio.m4a',
+          type: 'audio/m4a'
         });
 
         // Use fetch instead of axios for FormData to ensure boundary is set correctly on Android
@@ -194,6 +194,7 @@ export default function DatesToRememberScreen() {
       fetchDates();
     } catch (error) {
       console.log('Error saving date:', error);
+      Alert.alert('Upload Error', JSON.stringify(error.response?.data || error.message));
       Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to save date' });
     } finally {
       setIsSubmitting(false);

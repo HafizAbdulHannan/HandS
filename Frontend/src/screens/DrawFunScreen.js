@@ -188,7 +188,10 @@ export default function DrawFunScreen() {
         }
       });
 
-      if (!uploadRes.ok) throw new Error('Upload failed');
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text();
+        throw new Error(errText || 'Upload failed');
+      }
       const uploadData = await uploadRes.json();
       const finalUrl = uploadData.url;
 
@@ -202,6 +205,7 @@ export default function DrawFunScreen() {
       navigation.goBack();
     } catch (error) {
       console.log('Error posting drawing:', error);
+      Alert.alert('API Error', JSON.stringify(error?.response?.data || error.message || error));
       Toast.show({ type: 'error', text1: 'Failed to post', text2: 'Please try again later' });
     } finally {
       setIsPosting(false);
