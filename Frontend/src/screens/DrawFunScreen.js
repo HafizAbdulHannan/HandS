@@ -90,6 +90,7 @@ export default function DrawFunScreen() {
   const pickImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
+      allowsEditing: true,
       quality: 0.5,
       base64: true,
     });
