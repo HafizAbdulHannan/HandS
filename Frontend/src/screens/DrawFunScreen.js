@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { 
   View, StyleSheet, TouchableOpacity, Text, 
-  PanResponder, Dimensions, Image, ActivityIndicator, TextInput, Platform 
+  PanResponder, Dimensions, Image, ActivityIndicator, TextInput, Platform, Alert 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
