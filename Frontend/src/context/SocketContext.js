@@ -60,8 +60,7 @@ export const SocketProvider = ({ children }) => {
     newSocket.on('receive_heartbeat', () => {
       console.log('Heartbeat Socket Received');
       try {
-        Vibration.cancel();
-        Vibration.vibrate(500); // Simple 500ms vibration (more compatible than array pattern)
+        Vibration.vibrate(500); 
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (err) {
         console.error('Vibration failed', err);
@@ -120,8 +119,7 @@ export const SocketProvider = ({ children }) => {
       
       // Visual & Haptic feedback for sender
       try {
-        Vibration.cancel();
-        Vibration.vibrate(500); // 500ms simple
+        Vibration.vibrate(500); 
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (e) {
         console.log(e);
