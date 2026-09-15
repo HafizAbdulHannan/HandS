@@ -151,20 +151,12 @@ export default function DatesToRememberScreen() {
           type: 'audio/m4a'
         });
 
-        // Use fetch instead of axios for FormData to ensure boundary is set correctly on Android
-        const token = await SecureStore.getItemAsync('userToken');
-        const uploadRes = await fetch(`${STATIC_URL}/api/upload`, {
-          method: 'POST',
-          body: formData,
+        const uploadRes = await axiosInstance.post('/upload', formData, {
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
+            'Content-Type': 'multipart/form-data'
           }
         });
-        
-        if (!uploadRes.ok) throw new Error('Upload failed');
-        const uploadData = await uploadRes.json();
-        audioUrl = uploadData.url;
+        audioUrl = uploadRes.data.url;
       }
 
       const response = await axiosInstance.post('/dates', {

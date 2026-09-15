@@ -178,22 +178,12 @@ export default function DrawFunScreen() {
         type: 'image/jpeg'
       });
 
-      const token = await SecureStore.getItemAsync('userToken');
-      const uploadRes = await fetch(`${STATIC_URL}/api/upload`, {
-        method: 'POST',
-        body: formData,
+      const uploadRes = await axiosInstance.post('/upload', formData, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
+          'Content-Type': 'multipart/form-data'
         }
       });
-
-      if (!uploadRes.ok) {
-        const errText = await uploadRes.text();
-        throw new Error(errText || 'Upload failed');
-      }
-      const uploadData = await uploadRes.json();
-      const finalUrl = uploadData.url;
+      const finalUrl = uploadRes.data.url;
 
       await axiosInstance.post('/posts', {
         content: 'Check out my drawing! 🎨',
