@@ -30,8 +30,7 @@ export const SocketProvider = ({ children }) => {
 
     // Listen for 'Miss You' events
     newSocket.on('receive_miss_you', () => {
-      // Trigger Haptic feedback & Strong Vibration
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Use pattern array for reliable vibration on all Androids [delay, duration, delay, duration]
       Vibration.vibrate([0, 500, 200, 500]);
       Toast.show({ type: 'info', text1: 'Miss You! ❤️', text2: 'Your partner misses you!', position: 'top' });
       // Show Hearts Animation
@@ -41,8 +40,6 @@ export const SocketProvider = ({ children }) => {
 
     // Listen for 'Love You' events
     newSocket.on('receive_love_you', () => {
-      // Trigger Haptic feedback & Strong Vibration
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Vibration.vibrate([0, 500, 200, 500]);
       Toast.show({ type: 'info', text1: 'Love You! 😘', text2: 'Your partner loves you!', position: 'top' });
       // Show Love Animation
@@ -52,7 +49,7 @@ export const SocketProvider = ({ children }) => {
 
     // Listen for Notifications
     newSocket.on('receive_notification', ({ title, message }) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Vibration.vibrate([0, 300]);
       Toast.show({ type: 'info', text1: title, text2: message, position: 'top' });
     });
 
@@ -60,11 +57,9 @@ export const SocketProvider = ({ children }) => {
     newSocket.on('receive_heartbeat', () => {
       console.log('Heartbeat Socket Received');
       try {
-        Vibration.vibrate(500); 
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Vibration.vibrate([0, 400, 100, 400]); 
       } catch (err) {
         console.error('Vibration failed', err);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       }
 
       setAnimationType('heartbeat');
@@ -90,7 +85,7 @@ export const SocketProvider = ({ children }) => {
       socket.emit('send_miss_you', { room, partnerId, senderId: userId, senderName: user?.fullName || user?.username });
 
       // Visual feedback for sender
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      Vibration.vibrate([0, 100]);
       setAnimationType('miss_you');
       setTimeout(() => setAnimationType(null), 4000);
       Toast.show({ type: 'success', text1: 'Sent! ❤️', text2: 'Your partner knows you miss them.' });
@@ -103,7 +98,7 @@ export const SocketProvider = ({ children }) => {
       socket.emit('send_love_you', { room, partnerId, senderId: userId, senderName: user?.fullName || user?.username });
 
       // Visual feedback for sender
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      Vibration.vibrate([0, 100]);
       setAnimationType('love_you');
       setTimeout(() => setAnimationType(null), 4000);
       Toast.show({ type: 'success', text1: 'Sent! 😘', text2: 'Your partner knows you love them.' });
@@ -119,8 +114,7 @@ export const SocketProvider = ({ children }) => {
       
       // Visual & Haptic feedback for sender
       try {
-        Vibration.vibrate(500); 
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Vibration.vibrate([0, 150]); 
       } catch (e) {
         console.log(e);
       }

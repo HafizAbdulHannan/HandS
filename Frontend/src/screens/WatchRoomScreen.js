@@ -847,12 +847,12 @@ const WatchRoomScreen = () => {
                     <Image source={{ uri: getMediaUrl(p.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
                   ) : (
                     <Text style={styles.avatarText}>
-                      {p.fullName ? p.fullName.charAt(0).toUpperCase() : p.username ? p.username.charAt(0).toUpperCase() : p.email.charAt(0).toUpperCase()}
+                      {(p.fullName || p.username || p.email || '?').charAt(0).toUpperCase()}
                     </Text>
                   )}
                 </View>
                 <Text style={[styles.participantName, { color: theme.colors.text }]}>
-                  {p.fullName || p.username || p.email} {p._id === roomData.host._id ? '(Host)' : ''}
+                  {p.fullName || p.username || p.email} {p._id === roomData.host?._id ? '(Host)' : ''}
                 </Text>
               </View>
               
