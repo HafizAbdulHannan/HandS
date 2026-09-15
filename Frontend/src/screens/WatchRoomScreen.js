@@ -69,15 +69,11 @@ const WatchRoomScreen = () => {
   const reactionTimeoutRef = useRef(null);
 
   const dummySource = 'https://www.w3schools.com/html/mov_bbb.mp4';
-  const videoPlayer = useVideoPlayer(mediaUrl || dummySource, player => {
+  const videoPlayer = useVideoPlayer(mediaUrl ? { uri: mediaUrl } : { uri: dummySource }, player => {
     player.loop = true;
   });
   
   const videoPlayerRef = useRef(videoPlayer);
-  useEffect(() => {
-    videoPlayerRef.current = videoPlayer;
-  }, [videoPlayer]);
-
   useEffect(() => {
     videoPlayerRef.current = videoPlayer;
   }, [videoPlayer]);
@@ -94,14 +90,19 @@ const WatchRoomScreen = () => {
           if (Platform.Version >= 31 && PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) {
             permissions.push(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
           }
-          const granted = await PermissionsAndroid.requestMultiple(permissions);
-          if (
-            granted['android.permission.RECORD_AUDIO'] !== PermissionsAndroid.RESULTS.GRANTED ||
-            granted['android.permission.CAMERA'] !== PermissionsAndroid.RESULTS.GRANTED
-          ) {
-            console.warn('Permissions not granted');
-            Toast.show({ type: 'error', text1: 'Permissions Required', text2: 'Please grant camera and mic permissions to join the room.' });
-            return;
+          
+          // CRITICAL: Filter out any undefined/null permissions to prevent native Java NullPointerException crash
+          const validPermissions = permissions.filter(Boolean);
+          if (validPermissions.length > 0) {
+            const granted = await PermissionsAndroid.requestMultiple(validPermissions);
+            if (
+              granted['android.permission.RECORD_AUDIO'] !== PermissionsAndroid.RESULTS.GRANTED ||
+              granted['android.permission.CAMERA'] !== PermissionsAndroid.RESULTS.GRANTED
+            ) {
+              console.warn('Permissions not granted');
+              Toast.show({ type: 'error', text1: 'Permissions Required', text2: 'Please grant camera and mic permissions to join the room.' });
+              return;
+            }
           }
           setIsPermissionsGranted(true);
         } else {
