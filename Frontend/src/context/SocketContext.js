@@ -61,8 +61,8 @@ export const SocketProvider = ({ children }) => {
       console.log('Heartbeat Socket Received');
       try {
         Vibration.cancel();
-        Vibration.vibrate([0, 200, 100, 200]);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); // Fallback haptics
+        Vibration.vibrate(500); // Simple 500ms vibration (more compatible than array pattern)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (err) {
         console.error('Vibration failed', err);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -119,8 +119,13 @@ export const SocketProvider = ({ children }) => {
       socket.emit('send_heartbeat', { room, partnerId, senderId: userId, senderName: user?.fullName || user?.username });
       
       // Visual & Haptic feedback for sender
-      Vibration.cancel();
-      Vibration.vibrate([0, 200, 100, 200]);
+      try {
+        Vibration.cancel();
+        Vibration.vibrate(500); // 500ms simple
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (e) {
+        console.log(e);
+      }
 
       setAnimationType('heartbeat');
       setTimeout(() => setAnimationType(null), 3000);
