@@ -58,7 +58,7 @@ export const SocketProvider = ({ children }) => {
       console.log('Heartbeat Socket Received');
       // Universal Vibration for all Androids
       try {
-        Vibration.vibrate([0, 500, 200, 500]);
+        Vibration.vibrate([0, 1500, 500, 1500, 500, 1500, 500, 1500]);
         if (Platform.OS !== 'android') {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
