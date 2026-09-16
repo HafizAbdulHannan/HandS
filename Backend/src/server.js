@@ -193,7 +193,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send_heartbeat', async ({ room, partnerId, senderId, senderName }) => {
-    socket.to(room).emit('receive_heartbeat', { timestamp: new Date() });
+    socket.to(room).emit('receive_heartbeat', { senderName, timestamp: new Date() });
     if (partnerId) {
       try {
         const partner = await User.findById(partnerId);

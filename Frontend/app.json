@@ -43,7 +43,7 @@
         "android.permission.ACCESS_WIFI_STATE",
         "android.permission.INTERNET"
       ],
-      "versionCode": 16,
+      "versionCode": 17,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -77,7 +77,10 @@
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 24
+            "minSdkVersion": 24,
+            "packagingOptions": {
+              "pickFirsts": ["**/libc++_shared.so"]
+            }
           }
         }
       ]

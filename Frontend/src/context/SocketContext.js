@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
-import { Vibration } from 'react-native';
+import { Vibration, Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { useAuth } from './AuthContext';
@@ -54,13 +54,20 @@ export const SocketProvider = ({ children }) => {
     });
 
     // Listen for Heartbeat
-    newSocket.on('receive_heartbeat', () => {
+    newSocket.on('receive_heartbeat', ({ senderName }) => {
       console.log('Heartbeat Socket Received');
+      // Universal Vibration for all Androids
       try {
-        Vibration.vibrate([0, 400, 100, 400]); 
+        if (Platform.OS === 'android') {
+          Vibration.vibrate(400); 
+        } else {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
       } catch (err) {
         console.error('Vibration failed', err);
       }
+
+      Toast.show({ type: 'info', text1: 'Heartbeat! 💓', text2: `${senderName || 'Your partner'} sent a heartbeat!`, position: 'top' });
 
       setAnimationType('heartbeat');
       setTimeout(() => setAnimationType(null), 3000);
