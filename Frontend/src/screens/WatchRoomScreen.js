@@ -15,21 +15,9 @@ import Toast from 'react-native-toast-message';
 import { PermissionsAndroid, NativeModules } from 'react-native';
 import Constants, { AppOwnership } from 'expo-constants';
 
-let createAgoraRtcEngine, ChannelProfileType, ClientRoleType, RtcSurfaceView;
-const isAgoraAvailable = !!NativeModules.AgoraRtcEngineModule;
-if (isAgoraAvailable) {
-  try {
-    const agora = require('react-native-agora');
-    createAgoraRtcEngine = agora.default;
-    ChannelProfileType = agora.ChannelProfileType;
-    ClientRoleType = agora.ClientRoleType;
-    RtcSurfaceView = agora.RtcSurfaceView;
-  } catch (e) {
-    console.warn("Failed to load react-native-agora dynamically:", e);
-  }
-}
 
-const AGORA_APP_ID = '32e0688e8a9840579f3282e75ea6a9ac';
+
+
 
 const WatchRoomScreen = () => {
   const route = useRoute();
@@ -51,126 +39,16 @@ const WatchRoomScreen = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isHostUploading, setIsHostUploading] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [isMicOn, setIsMicOn] = useState(false);
-  const [isVideoOn, setIsVideoOn] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+        const [refreshing, setRefreshing] = useState(false);
   const [activeReaction, setActiveReaction] = useState(null);
   
-  // Agora State
-  const [isJoined, setIsJoined] = useState(false);
-  const [localUid, setLocalUid] = useState(0);
-  const [remoteUids, setRemoteUids] = useState([]);
-  const [isPermissionsGranted, setIsPermissionsGranted] = useState(false);
-  const [isEngineInitialized, setIsEngineInitialized] = useState(false);
-  const agoraEngineRef = useRef(null);
+
 
   const playerRef = useRef(null);
   const reactionTimeoutRef = useRef(null);
   const videoPlayerRef = useRef(null);
 
-  // Agora Initialization
-  useEffect(() => {
-    const setupAgora = async () => {
-      try {
-        if (Platform.OS === 'android') {
-          const permissions = [
-            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-            PermissionsAndroid.PERMISSIONS.CAMERA,
-          ];
-          if (Platform.Version >= 31 && PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) {
-            permissions.push(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
-          }
-          
-          // CRITICAL: Filter out any undefined/null permissions to prevent native Java NullPointerException crash
-          const validPermissions = permissions.filter(Boolean);
-          if (validPermissions.length > 0) {
-            const granted = await PermissionsAndroid.requestMultiple(validPermissions);
-            if (
-              granted['android.permission.RECORD_AUDIO'] !== PermissionsAndroid.RESULTS.GRANTED ||
-              granted['android.permission.CAMERA'] !== PermissionsAndroid.RESULTS.GRANTED
-            ) {
-              console.warn('Permissions not granted');
-              Toast.show({ type: 'error', text1: 'Permissions Required', text2: 'Please grant camera and mic permissions to join the room.' });
-              return;
-            }
-          }
-          setIsPermissionsGranted(true);
-        } else {
-          setIsPermissionsGranted(true);
-        }
 
-        try {
-          // Prevent fatal JVM crash on Android by ensuring the native module is actually linked
-          const { NativeModules } = require('react-native');
-          if (!NativeModules.AgoraRtcEngineModule) {
-             console.warn("Agora Native Module is missing! Please rebuild the app with the correct EAS plugin.");
-             return;
-          }
-          if (!isAgoraAvailable || !createAgoraRtcEngine) {
-             console.warn("Agora native module is not available. Skipping initialization.");
-             return;
-          }
-
-          if (Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient') {
-             console.warn("Agora native module is not available in Expo Go. Skipping initialization.");
-             return;
-          }
-
-          const engine = createAgoraRtcEngine();
-          engine.initialize({ appId: AGORA_APP_ID });
-          agoraEngineRef.current = engine;
-          
-          engine.registerEventHandler({
-          onJoinChannelSuccess: (connection) => {
-            setIsJoined(true);
-            setLocalUid(connection.localUid);
-          },
-          onUserJoined: (_connection, uid) => {
-            setRemoteUids((prev) => {
-              if (!prev.includes(uid)) return [...prev, uid];
-              return prev;
-            });
-          },
-          onUserOffline: (_connection, uid) => {
-            setRemoteUids((prev) => prev.filter((id) => id !== uid));
-          },
-        });
-
-          engine.enableVideo();
-          engine.enableAudio();
-          // Start muted & video off
-          engine.muteLocalAudioStream(true);
-          engine.muteLocalVideoStream(true);
-
-          engine.joinChannel('', roomCode, 0, {
-            channelProfile: 0, // ChannelProfileCommunication
-            clientRoleType: 1, // ClientRoleBroadcaster
-          });
-          
-          setIsEngineInitialized(true);
-        } catch (engineError) {
-          console.warn('Agora engine failed to initialize (Missing Native Modules?):', engineError);
-        }
-      } catch (e) {
-        console.error('Failed to setup Agora permissions/environment:', e);
-      }
-    };
-
-    setupAgora();
-
-    return () => {
-      if (agoraEngineRef.current && isEngineInitialized) {
-        try {
-          agoraEngineRef.current.leaveChannel();
-          agoraEngineRef.current.removeAllListeners();
-          agoraEngineRef.current.release();
-        } catch (e) {
-          console.warn('Error releasing Agora engine', e);
-        }
-      }
-    };
-  }, [roomCode]);
 
   useEffect(() => {
     fetchRoomDetails();
@@ -429,50 +307,7 @@ const WatchRoomScreen = () => {
     }
   };
 
-  const handleScreenShare = async () => {
-    if (!isHost) return;
-    try {
-      if (isScreenSharing) {
-        await agoraEngineRef.current?.stopScreenCapture();
-        await agoraEngineRef.current?.updateChannelMediaOptions({
-          publishScreenCaptureVideo: false,
-          publishCameraTrack: isVideoOn,
-          publishScreenCaptureAudio: false,
-          publishMicrophoneTrack: isMicOn,
-        });
-        setIsScreenSharing(false);
-        setMediaType('none');
-        if (socket) {
-          socket.emit('change_media', { roomCode, media: { type: 'none', url: '' } });
-        }
-      } else {
-        await agoraEngineRef.current?.startScreenCapture({
-          captureVideo: true,
-          captureAudio: true,
-          videoParams: {
-            dimensions: { width: 1280, height: 720 },
-            frameRate: 15,
-            bitrate: 1000,
-          }
-        });
-        await agoraEngineRef.current?.updateChannelMediaOptions({
-          publishScreenCaptureVideo: true,
-          publishCameraTrack: false,
-          publishScreenCaptureAudio: true,
-          publishMicrophoneTrack: isMicOn,
-        });
-        setIsScreenSharing(true);
-        setMediaType('screen_share');
-        if (socket) {
-          socket.emit('change_media', { roomCode, media: { type: 'screen_share', url: localUid.toString() } });
-        }
-      }
-    } catch (error) {
-      console.error('Error with screen share:', error);
-      Alert.alert('Error', 'Could not toggle screen share');
-    }
-  };
-
+  
   const handleDeleteRoom = () => {
     Alert.alert(
       'Delete Room',
@@ -546,51 +381,8 @@ const WatchRoomScreen = () => {
     }
   };
 
-  const handleToggleMic = async () => {
-    if (Platform.OS === 'android') {
-      const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
-      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-        Alert.alert('Permission Denied', 'Microphone access is required.');
-        return;
-      }
-    }
-    
-    const newMicState = !isMicOn;
-    if (agoraEngineRef.current) {
-      if (newMicState) {
-        await agoraEngineRef.current.enableLocalAudio(true);
-        await agoraEngineRef.current.muteLocalAudioStream(false);
-      } else {
-        await agoraEngineRef.current.muteLocalAudioStream(true);
-      }
-      setIsMicOn(newMicState);
-    }
-  };
-
-  const handleToggleVideo = async () => {
-    if (Platform.OS === 'android') {
-      const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
-      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-        Alert.alert('Permission Denied', 'Camera access is required.');
-        return;
-      }
-    }
-    
-    const newVideoState = !isVideoOn;
-    if (agoraEngineRef.current) {
-      if (newVideoState) {
-        await agoraEngineRef.current.enableLocalVideo(true);
-        await agoraEngineRef.current.muteLocalVideoStream(false);
-        agoraEngineRef.current.startPreview();
-      } else {
-        await agoraEngineRef.current.muteLocalVideoStream(true);
-        await agoraEngineRef.current.enableLocalVideo(false);
-        agoraEngineRef.current.stopPreview();
-      }
-      setIsVideoOn(newVideoState);
-    }
-  };
-
+  
+  
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
       {!roomData && (
@@ -665,19 +457,6 @@ const WatchRoomScreen = () => {
               <View style={{ width: `${uploadProgress}%`, height: '100%', backgroundColor: theme.colors.primary, borderRadius: 3 }} />
             </View>
           </View>
-        ) : mediaType === 'screen_share' ? (
-          <View style={styles.playerWrapper}>
-            <View pointerEvents={isHost ? 'auto' : 'none'} style={styles.playerInner}>
-              {isHost ? (
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                  <Ionicons name="desktop-outline" size={60} color={theme.colors.primary} />
-                  <Text style={{ color: '#fff', marginTop: 10, fontSize: 16 }}>You are sharing your screen</Text>
-                </View>
-              ) : isEngineInitialized && isPermissionsGranted && isAgoraAvailable && RtcSurfaceView ? (
-                <RtcSurfaceView canvas={{ uid: parseInt(mediaUrl) || 0 }} style={{ flex: 1 }} />
-              ) : null}
-            </View>
-          </View>
         ) : (
           <View style={styles.noMediaContainer}>
             <Ionicons name="film-outline" size={60} color="#666" />
@@ -710,41 +489,12 @@ const WatchRoomScreen = () => {
               </Text>
             </TouchableOpacity>
             
-            <TouchableOpacity 
-              style={[styles.controlButton, { backgroundColor: isScreenSharing ? '#ff4757' : theme.colors.card }]}
-              onPress={handleScreenShare}
-            >
-              <Ionicons name="desktop-outline" size={28} color={isScreenSharing ? '#fff' : theme.colors.text} />
-              <Text style={[styles.controlButtonText, { color: isScreenSharing ? '#fff' : theme.colors.text }]}>
-                {isScreenSharing ? 'Stop Sharing' : 'Share Screen'}
-              </Text>
-            </TouchableOpacity>
+            
           </ScrollView>
         </View>
       )}
 
-      {/* Call Controls (For Everyone) */}
-      <View style={[styles.controlsContainer, { borderBottomColor: theme.colors.border }]}>
-        <Text style={[styles.controlsTitle, { color: theme.colors.text }]}>Call Controls</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.controlsRow}>
-          <TouchableOpacity 
-            style={[styles.controlButton, { backgroundColor: theme.colors.card }]}
-            onPress={handleToggleMic}
-          >
-            <Ionicons name={isMicOn ? "mic" : "mic-off"} size={24} color={isMicOn ? theme.colors.primary : "#ff4757"} />
-            <Text style={[styles.controlButtonText, { color: theme.colors.text }]}>{isMicOn ? 'Mute' : 'Unmute'}</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.controlButton, { backgroundColor: theme.colors.card }]}
-            onPress={handleToggleVideo}
-          >
-            <Ionicons name={isVideoOn ? "videocam" : "videocam-off"} size={24} color={isVideoOn ? theme.colors.primary : "#ff4757"} />
-            <Text style={[styles.controlButtonText, { color: theme.colors.text }]}>{isVideoOn ? 'Stop Video' : 'Start Video'}</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
-
+      
       {/* Reaction Tab */}
       <View style={styles.reactionTabContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reactionScroll}>
@@ -758,100 +508,11 @@ const WatchRoomScreen = () => {
 
       {/* Participants */}
       <View style={styles.participantsSection}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Live Video Call</Text>
-        
-        {/* WhatsApp-Style PIP Video Call Area */}
-        {(isVideoOn || remoteUids.length > 0) && isEngineInitialized && isPermissionsGranted && (
-          <View style={[styles.videoCallContainer, { backgroundColor: theme.colors.card }]}>
-            {remoteUids.length > 0 ? (
-              <View style={styles.agoraVideoContainer}>
-                {isEngineInitialized && isPermissionsGranted && isAgoraAvailable && RtcSurfaceView ? (
-                  <RtcSurfaceView canvas={{ uid: remoteUids[0] }} style={styles.agoraVideoView} />
-                ) : (
-                  <View style={[styles.agoraVideoView, { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' }]}>
-                    <Ionicons name="person" size={40} color="#666" />
-                  </View>
-                )}
-                {isVideoOn && (
-                  <View style={[styles.pipVideoContainer, { borderColor: theme.colors.primary }]}>
-                    {isEngineInitialized && isPermissionsGranted && isAgoraAvailable && RtcSurfaceView ? (
-                      <RtcSurfaceView canvas={{ uid: 0 }} style={styles.agoraVideoView} />
-                    ) : (
-                      <View style={[styles.agoraVideoView, { backgroundColor: '#444', justifyContent: 'center', alignItems: 'center' }]}>
-                        <Ionicons name="videocam-off" size={30} color="#777" />
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
-            ) : (
-              <View style={styles.mainVideoContainer}>
-                {isVideoOn ? (
-                  <>
-                    {isEngineInitialized && isPermissionsGranted && isAgoraAvailable && RtcSurfaceView ? (
-                      <RtcSurfaceView canvas={{ uid: 0 }} style={styles.agoraVideoView} />
-                    ) : (
-                      <View style={[styles.agoraVideoView, { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' }]}>
-                        <Ionicons name="videocam" size={40} color="#666" />
-                      </View>
-                    )}
-                    <View style={styles.localVideoLabel}>
-                      <Text style={styles.localVideoLabelText}>You (Waiting for partner)</Text>
-                    </View>
-                  </>
-                ) : (
-                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                    <Ionicons name="videocam-off-outline" size={40} color={theme.colors.textSecondary} />
-                  </View>
-                )}
-              </View>
-            )}
-          </View>
-        )}
-
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 15, marginBottom: 10 }}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.text, marginTop: 0, marginBottom: 0 }]}>Participants</Text>
-          <TouchableOpacity onPress={onRefresh} style={{ padding: 5 }}>
-            <Ionicons name="refresh" size={24} color={theme.colors.primary} />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView 
-          style={styles.participantsList}
-          contentContainerStyle={{ paddingBottom: 80 }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
-          }
-        >
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Participants</Text>
+        <ScrollView style={styles.participantsList} contentContainerStyle={{ paddingBottom: 80 }}>
           {roomData && roomData.participants.map(p => (
             <View key={p._id} style={[styles.participantRow, { backgroundColor: theme.colors.card }]}>
-              <View style={styles.participantInfo}>
-                <View style={[styles.avatar, { backgroundColor: theme.colors.primary, overflow: 'hidden' }]}>
-                  {p.avatar ? (
-                    <Image source={{ uri: getMediaUrl(p.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
-                  ) : (
-                    <Text style={styles.avatarText}>
-                      {(p.fullName || p.username || p.email || '?').charAt(0).toUpperCase()}
-                    </Text>
-                  )}
-                </View>
-                <Text style={[styles.participantName, { color: theme.colors.text }]}>
-                  {p.fullName || p.username || p.email} {p._id === roomData.host?._id ? '(Host)' : ''}
-                </Text>
-              </View>
-              
-              {isHost && p._id !== user._id && (
-                <TouchableOpacity 
-                  style={styles.kickButton}
-                  onPress={() => {
-                    socket.emit('kick_user', { roomCode, userId: p._id });
-                    Alert.alert('Kicked', 'User has been kicked.');
-                  }}
-                >
-                  <Ionicons name="person-remove-outline" size={20} color="#ff4757" />
-                </TouchableOpacity>
-              )}
+              <Text style={{color: theme.colors.text}}>{p.fullName || p.username}</Text>
             </View>
           ))}
         </ScrollView>

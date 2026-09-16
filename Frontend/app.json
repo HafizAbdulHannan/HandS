@@ -43,7 +43,7 @@
         "android.permission.ACCESS_WIFI_STATE",
         "android.permission.INTERNET"
       ],
-      "versionCode": 17,
+      "versionCode": 18,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
