@@ -43,7 +43,7 @@
         "android.permission.ACCESS_WIFI_STATE",
         "android.permission.INTERNET"
       ],
-      "versionCode": 15,
+      "versionCode": 16,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -60,7 +60,6 @@
       "expo-video",
       "@react-native-community/datetimepicker",
       "expo-audio",
-      "react-native-agora",
       "expo-asset",
       "expo-secure-store",
       "expo-location",

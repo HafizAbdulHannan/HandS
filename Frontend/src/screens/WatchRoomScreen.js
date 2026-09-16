@@ -9,7 +9,7 @@ import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
 import { Ionicons } from '@expo/vector-icons';
 import YoutubeIframe from 'react-native-youtube-iframe';
 import * as ImagePicker from 'expo-image-picker';
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { Video } from 'expo-av';
 import FloatingEmojis from '../components/FloatingEmojis';
 import Toast from 'react-native-toast-message';
 import { PermissionsAndroid, NativeModules } from 'react-native';
@@ -67,16 +67,7 @@ const WatchRoomScreen = () => {
 
   const playerRef = useRef(null);
   const reactionTimeoutRef = useRef(null);
-
-  const dummySource = 'https://www.w3schools.com/html/mov_bbb.mp4';
-  const videoPlayer = useVideoPlayer(mediaUrl ? { uri: mediaUrl } : { uri: dummySource }, player => {
-    player.loop = true;
-  });
-  
-  const videoPlayerRef = useRef(videoPlayer);
-  useEffect(() => {
-    videoPlayerRef.current = videoPlayer;
-  }, [videoPlayer]);
+  const videoPlayerRef = useRef(null);
 
   // Agora Initialization
   useEffect(() => {
@@ -188,18 +179,17 @@ const WatchRoomScreen = () => {
 
       socket.on('receive_media_play', () => {
         setPlaying(true);
-        if (videoPlayerRef.current) videoPlayerRef.current.play();
+        if (videoPlayerRef.current) videoPlayerRef.current.playAsync();
       });
       socket.on('receive_media_pause', () => {
         setPlaying(false);
-        if (videoPlayerRef.current) videoPlayerRef.current.pause();
+        if (videoPlayerRef.current) videoPlayerRef.current.pauseAsync();
       });
       socket.on('receive_media_seek', ({ timestamp }) => {
-        if (playerRef.current) {
+        if (mediaType === 'youtube' && playerRef.current) {
           playerRef.current.seekTo(timestamp, true);
-        }
-        if (videoPlayerRef.current) {
-          videoPlayerRef.current.currentTime = timestamp;
+        } else if (mediaType === 'upload' && videoPlayerRef.current) {
+          videoPlayerRef.current.setPositionAsync(timestamp * 1000);
         }
       });
       socket.on('receive_change_media', ({ media }) => {
@@ -210,11 +200,11 @@ const WatchRoomScreen = () => {
           setMediaUrl(`${STATIC_URL}${media.url}`);
         }
         setPlaying(false);
-        if (videoPlayerRef.current) videoPlayerRef.current.pause();
+        if (videoPlayerRef.current) videoPlayerRef.current.pauseAsync();
       });
       socket.on('receive_kick_user', ({ userId }) => {
         if (userId === user._id) {
-          Alert.alert('Kicked', 'You have been removed from the room.');
+          Alert.alert('Disconnected', 'The host has ended the watch party.');
           navigation.goBack();
         }
       });
@@ -241,38 +231,36 @@ const WatchRoomScreen = () => {
         Toast.show({ type: 'error', text1: `${guestName} declined your invite.`, position: 'top' });
       });
 
-      socket.on('receive_sync_media', ({ timestamp, playing: hostPlaying }) => {
-        if (isHost) return;
-        
-        // Sync playing state
+      socket.on('receive_sync_media', async ({ timestamp, playing: hostPlaying }) => {
         if (hostPlaying !== playing) {
           setPlaying(hostPlaying);
           if (hostPlaying && videoPlayerRef.current) {
-            videoPlayerRef.current.play();
+            videoPlayerRef.current.playAsync();
           } else if (!hostPlaying && videoPlayerRef.current) {
-            videoPlayerRef.current.pause();
+            videoPlayerRef.current.pauseAsync();
           }
         }
-
-        // Sync timestamp if out of sync by >1.5s
-        const syncThreshold = 1.5;
-        const checkSync = async () => {
-          let localTime = 0;
+        
+        // Only seek if the difference is more than 2 seconds to avoid stutter
+        let localTime = 0;
+        try {
           if (mediaType === 'youtube' && playerRef.current) {
             localTime = await playerRef.current.getCurrentTime();
           } else if (mediaType === 'upload' && videoPlayerRef.current) {
-            localTime = videoPlayerRef.current.currentTime;
+            const status = await videoPlayerRef.current.getStatusAsync();
+            if (status.isLoaded) localTime = status.positionMillis / 1000;
           }
           
-          if (Math.abs(localTime - timestamp) > syncThreshold) {
+          if (Math.abs(localTime - timestamp) > 2) {
             if (mediaType === 'youtube' && playerRef.current) {
               playerRef.current.seekTo(timestamp, true);
             } else if (mediaType === 'upload' && videoPlayerRef.current) {
-              videoPlayerRef.current.currentTime = timestamp;
+              videoPlayerRef.current.setPositionAsync(timestamp * 1000);
             }
           }
-        };
-        checkSync();
+        } catch (err) {
+          console.log(err);
+        }
       });
 
       socket.on('receive_reaction', ({ reaction }) => {
@@ -353,37 +341,21 @@ const WatchRoomScreen = () => {
   }, [isHost, socket, roomCode]);
 
   useEffect(() => {
-    if (videoPlayer && isHost) {
-      const subscription = videoPlayer.addListener('playingChange', ({ isPlaying }) => {
-        if (isPlaying && !playing) {
-          setPlaying(true);
-          socket.emit('media_play', { roomCode, timestamp: videoPlayer.currentTime });
-        } else if (!isPlaying && playing) {
-          setPlaying(false);
-          socket.emit('media_pause', { roomCode, timestamp: videoPlayer.currentTime });
-        }
-      });
-      return () => {
-        subscription.remove();
-      };
-    }
-  }, [videoPlayer, isHost, playing, socket, roomCode]);
-
-  useEffect(() => {
     let syncInterval;
     if (isHost && socket && playing) {
       syncInterval = setInterval(async () => {
         let currentTime = 0;
         if (mediaType === 'youtube' && playerRef.current) {
           currentTime = await playerRef.current.getCurrentTime();
-        } else if (mediaType === 'upload' && videoPlayer) {
-          currentTime = videoPlayer.currentTime;
+        } else if (mediaType === 'upload' && videoPlayerRef.current) {
+          const status = await videoPlayerRef.current.getStatusAsync();
+          if (status.isLoaded) currentTime = status.positionMillis / 1000;
         }
         socket.emit('sync_media', { roomCode, timestamp: currentTime, playing });
       }, 3000);
     }
     return () => clearInterval(syncInterval);
-  }, [isHost, socket, playing, mediaType, videoPlayer, roomCode]);
+  }, [isHost, socket, playing, mediaType, roomCode]);
 
   const showReaction = (reaction) => {
     setActiveReaction(reaction);
@@ -440,7 +412,7 @@ const WatchRoomScreen = () => {
         setMediaType('upload');
         setMediaUrl(`${STATIC_URL}${uploadedUrl}`);
         setPlaying(false);
-        if (videoPlayer) videoPlayer.pause();
+        if (videoPlayerRef.current) videoPlayerRef.current.pauseAsync();
         
         if (socket) {
           socket.emit('change_media', { 
@@ -659,14 +631,27 @@ const WatchRoomScreen = () => {
               />
             </View>
           </View>
-        ) : mediaType === 'upload' && mediaUrl ? (
+        ) : mediaType === 'upload' ? (
           <View style={styles.playerWrapper}>
             <View pointerEvents={isHost ? 'auto' : 'none'} style={styles.playerInner}>
-              <VideoView
-                player={videoPlayer}
+              <Video
+                ref={videoPlayerRef}
+                source={{ uri: mediaUrl }}
                 style={{ width: '100%', height: '100%' }}
-                allowsFullscreen
-                allowsPictureInPicture
+                useNativeControls={isHost}
+                resizeMode="contain"
+                isLooping
+                onPlaybackStatusUpdate={(status) => {
+                  if (status.isLoaded && isHost) {
+                    if (status.isPlaying && !playing) {
+                      setPlaying(true);
+                      socket.emit('media_play', { roomCode, timestamp: status.positionMillis / 1000 });
+                    } else if (!status.isPlaying && playing) {
+                      setPlaying(false);
+                      socket.emit('media_pause', { roomCode, timestamp: status.positionMillis / 1000 });
+                    }
+                  }
+                }}
               />
             </View>
           </View>
