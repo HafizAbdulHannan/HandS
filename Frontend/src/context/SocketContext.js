@@ -120,7 +120,7 @@ export const SocketProvider = ({ children }) => {
       
       // Visual & Haptic feedback for sender
       try {
-        Vibration.vibrate([0, 150]); 
+        Vibration.vibrate([0, 1500, 500, 1500, 500, 1500, 500, 1500]); 
       } catch (e) {
         console.log(e);
       }

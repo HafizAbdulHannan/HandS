@@ -30,6 +30,7 @@ if (isAgoraAvailable) {
 }
 
 const AGORA_APP_ID = '32e0688e8a9840579f3282e75ea6a9ac';
+let globalAgoraEngine = null;
 
 const WatchRoomScreen = () => {
   const route = useRoute();
@@ -117,8 +118,11 @@ const WatchRoomScreen = () => {
              return;
           }
 
-          const engine = createAgoraRtcEngine();
-          engine.initialize({ appId: AGORA_APP_ID });
+          if (!globalAgoraEngine) {
+            globalAgoraEngine = createAgoraRtcEngine();
+            globalAgoraEngine.initialize({ appId: AGORA_APP_ID });
+          }
+          const engine = globalAgoraEngine;
           agoraEngineRef.current = engine;
           
           engine.registerEventHandler({
@@ -144,8 +148,8 @@ const WatchRoomScreen = () => {
           engine.muteLocalVideoStream(true);
 
           engine.joinChannel('', roomCode, 0, {
-            channelProfile: 0, // ChannelProfileCommunication
-            clientRoleType: 1, // ClientRoleBroadcaster
+            channelProfile: ChannelProfileType?.ChannelProfileCommunication || 0,
+            clientRoleType: ClientRoleType?.ClientRoleBroadcaster || 1,
           });
           
           setIsEngineInitialized(true);
@@ -164,7 +168,7 @@ const WatchRoomScreen = () => {
         try {
           agoraEngineRef.current.leaveChannel();
           agoraEngineRef.current.removeAllListeners();
-          agoraEngineRef.current.release();
+          // DO NOT release engine to prevent crashes on remount
         } catch (e) {
           console.warn('Error releasing Agora engine', e);
         }
