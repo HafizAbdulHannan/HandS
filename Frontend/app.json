@@ -79,7 +79,9 @@
           "android": {
             "minSdkVersion": 24,
             "packagingOptions": {
-              "pickFirsts": ["**/libc++_shared.so"]
+              "pickFirsts": [
+                "**/libc++_shared.so"
+              ]
             }
           }
         }
@@ -95,11 +97,21 @@
                   "targetName": "HandSWidgets",
                   "bundleIdentifier": "undefined.HandSWidgets",
                   "entitlements": {}
+                },
+                {
+                  "targetName": "HandSWidgets",
+                  "bundleIdentifier": "undefined.HandSWidgets",
+                  "entitlements": {}
+                },
+                {
+                  "targetName": "HandSWidgets",
+                  "bundleIdentifier": "undefined.HandSWidgets"
                 }
               ]
             }
           }
-        }
+        },
+        "projectId": "b2ae7d16-a9fe-4e80-90ce-6b48cddd5049"
       }
     },
     "owner": "discoverhub3"
