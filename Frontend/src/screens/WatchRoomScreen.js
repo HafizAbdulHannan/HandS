@@ -70,46 +70,55 @@ const WatchRoomScreen = () => {
   const reactionTimeoutRef = useRef(null);
   const videoPlayerRef = useRef(null);
 
-  // Agora Initialization
-  useEffect(() => {
-    const setupAgora = async () => {
-      try {
-        if (Platform.OS === 'android') {
-          const permissions = [
-            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-            PermissionsAndroid.PERMISSIONS.CAMERA,
-          ];
-          if (Platform.Version >= 31 && PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) {
-            permissions.push(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
-          }
-          
-          // CRITICAL: Filter out any undefined/null permissions to prevent native Java NullPointerException crash
-          const validPermissions = permissions.filter(Boolean);
-          if (validPermissions.length > 0) {
-            const granted = await PermissionsAndroid.requestMultiple(validPermissions);
-            if (
-              granted['android.permission.RECORD_AUDIO'] !== PermissionsAndroid.RESULTS.GRANTED ||
-              granted['android.permission.CAMERA'] !== PermissionsAndroid.RESULTS.GRANTED
-            ) {
-              console.warn('Permissions not granted');
-              Toast.show({ type: 'error', text1: 'Permissions Required', text2: 'Please grant camera and mic permissions to join the room.' });
-              return;
-            }
-          }
-          setIsPermissionsGranted(true);
-        } else {
-          setIsPermissionsGranted(true);
-        }
+  const [loadingPhase, setLoadingPhase] = useState(0);
+  const [loadingText, setLoadingText] = useState('Plz wait room is creating...');
+  const [loadingProgress, setLoadingProgress] = useState(10);
 
+  // Agora Initialization & Loading Sequence
+  useEffect(() => {
+    let isMounted = true;
+    let timer1, timer2, timer3;
+
+    // Step 1: Room creating loading state
+    timer1 = setTimeout(() => {
+      if (!isMounted) return;
+      setLoadingPhase(1);
+      setLoadingText('Engine is starting.....');
+      setLoadingProgress(50);
+
+      // Step 2: Initialize Agora
+      timer2 = setTimeout(async () => {
+        if (!isMounted) return;
+        
         try {
-          // Prevent fatal JVM crash on Android by ensuring the native module is actually linked
-          const { NativeModules } = require('react-native');
-          if (!NativeModules.AgoraRtcEngineModule) {
-             console.warn("Agora Native Module is missing! Please rebuild the app with the correct EAS plugin.");
-             return;
+          if (Platform.OS === 'android') {
+            const permissions = [
+              PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+              PermissionsAndroid.PERMISSIONS.CAMERA,
+            ];
+            if (Platform.Version >= 31 && PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) {
+              permissions.push(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
+            }
+            const validPermissions = permissions.filter(Boolean);
+            if (validPermissions.length > 0) {
+              const granted = await PermissionsAndroid.requestMultiple(validPermissions);
+              if (
+                granted['android.permission.RECORD_AUDIO'] !== PermissionsAndroid.RESULTS.GRANTED ||
+                granted['android.permission.CAMERA'] !== PermissionsAndroid.RESULTS.GRANTED
+              ) {
+                console.warn('Permissions not granted');
+                Toast.show({ type: 'error', text1: 'Permissions Required', text2: 'Please grant camera and mic permissions to join the room.' });
+                return;
+              }
+            }
+            if (isMounted) setIsPermissionsGranted(true);
+          } else {
+            if (isMounted) setIsPermissionsGranted(true);
           }
-          if (!isAgoraAvailable || !createAgoraRtcEngine) {
-             console.warn("Agora native module is not available. Skipping initialization.");
+
+          const { NativeModules } = require('react-native');
+          if (!NativeModules.AgoraRtcEngineModule || !isAgoraAvailable || !createAgoraRtcEngine) {
+             console.warn("Agora native module is missing or unavailable. Skipping initialization.");
              return;
           }
 
@@ -126,24 +135,26 @@ const WatchRoomScreen = () => {
           agoraEngineRef.current = engine;
           
           engine.registerEventHandler({
-          onJoinChannelSuccess: (connection) => {
-            setIsJoined(true);
-            setLocalUid(connection.localUid);
-          },
-          onUserJoined: (_connection, uid) => {
-            setRemoteUids((prev) => {
-              if (!prev.includes(uid)) return [...prev, uid];
-              return prev;
-            });
-          },
-          onUserOffline: (_connection, uid) => {
-            setRemoteUids((prev) => prev.filter((id) => id !== uid));
-          },
-        });
+            onJoinChannelSuccess: (connection) => {
+              if (isMounted) {
+                setIsJoined(true);
+                setLocalUid(connection.localUid);
+              }
+            },
+            onUserJoined: (_connection, uid) => {
+              if (isMounted) {
+                setRemoteUids((prev) => prev.includes(uid) ? prev : [...prev, uid]);
+              }
+            },
+            onUserOffline: (_connection, uid) => {
+              if (isMounted) {
+                setRemoteUids((prev) => prev.filter((id) => id !== uid));
+              }
+            },
+          });
 
           engine.enableVideo();
           engine.enableAudio();
-          // Start muted & video off
           engine.muteLocalAudioStream(true);
           engine.muteLocalVideoStream(true);
 
@@ -152,23 +163,33 @@ const WatchRoomScreen = () => {
             clientRoleType: ClientRoleType?.ClientRoleBroadcaster || 1,
           });
           
-          setIsEngineInitialized(true);
+          if (isMounted) setIsEngineInitialized(true);
         } catch (engineError) {
-          console.warn('Agora engine failed to initialize (Missing Native Modules?):', engineError);
+          console.warn('Agora engine failed to initialize:', engineError);
+        } finally {
+          if (isMounted) {
+            setLoadingPhase(2);
+            setLoadingText('100% Ready!');
+            setLoadingProgress(100);
+            
+            timer3 = setTimeout(() => {
+              if (isMounted) setLoadingPhase(3); // Done
+            }, 800);
+          }
         }
-      } catch (e) {
-        console.error('Failed to setup Agora permissions/environment:', e);
-      }
-    };
-
-    setupAgora();
+      }, 500);
+    }, 1500);
 
     return () => {
-      if (agoraEngineRef.current && isEngineInitialized) {
+      isMounted = false;
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+      
+      if (agoraEngineRef.current) {
         try {
           agoraEngineRef.current.leaveChannel();
           agoraEngineRef.current.removeAllListeners();
-          // DO NOT release engine to prevent crashes on remount
         } catch (e) {
           console.warn('Error releasing Agora engine', e);
         }
@@ -597,10 +618,13 @@ const WatchRoomScreen = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
-      {!roomData && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 999, justifyContent: 'center', alignItems: 'center' }]}>
+      {(loadingPhase < 3 || !roomData) && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 999, justifyContent: 'center', alignItems: 'center' }]}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={{ color: '#fff', marginTop: 10 }}>Entering Room...</Text>
+          <Text style={{ color: '#fff', marginTop: 15, fontSize: 18, fontWeight: 'bold' }}>{loadingText}</Text>
+          <View style={{ width: '60%', height: 6, backgroundColor: '#333', borderRadius: 3, marginTop: 15, overflow: 'hidden' }}>
+            <View style={{ width: `${loadingProgress}%`, height: '100%', backgroundColor: theme.colors.primary }} />
+          </View>
         </View>
       )}
       {/* Header */}
