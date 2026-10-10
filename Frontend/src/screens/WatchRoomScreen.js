@@ -20,9 +20,9 @@ const isAgoraAvailable = !!NativeModules.AgoraRtcEngineModule;
 if (isAgoraAvailable) {
   try {
     const agora = require('react-native-agora');
-    createAgoraRtcEngine = agora.default;
-    ChannelProfileType = agora.ChannelProfileType;
-    ClientRoleType = agora.ClientRoleType;
+    createAgoraRtcEngine = agora.createAgoraRtcEngine || agora.default;
+    ChannelProfileType = agora.ChannelProfileType || { ChannelProfileLiveBroadcasting: 1 };
+    ClientRoleType = agora.ClientRoleType || { ClientRoleBroadcaster: 1, ClientRoleAudience: 2 };
     RtcSurfaceView = agora.RtcSurfaceView;
   } catch (e) {
     console.warn("Failed to load react-native-agora dynamically:", e);
@@ -65,6 +65,7 @@ const WatchRoomScreen = () => {
   const [isPermissionsGranted, setIsPermissionsGranted] = useState(false);
   const [isEngineInitialized, setIsEngineInitialized] = useState(false);
   const agoraEngineRef = useRef(null);
+  const agoraEventHandlerRef = useRef(null);
 
   const playerRef = useRef(null);
   const reactionTimeoutRef = useRef(null);
@@ -129,12 +130,16 @@ const WatchRoomScreen = () => {
 
           if (!globalAgoraEngine) {
             globalAgoraEngine = createAgoraRtcEngine();
-            globalAgoraEngine.initialize({ appId: AGORA_APP_ID });
+            // In v4, passing channelProfile might be required to prevent native crashes on certain SDKs
+            globalAgoraEngine.initialize({ 
+              appId: AGORA_APP_ID,
+              channelProfile: ChannelProfileType?.ChannelProfileLiveBroadcasting || 1
+            });
           }
           const engine = globalAgoraEngine;
           agoraEngineRef.current = engine;
           
-          engine.registerEventHandler({
+          const eventHandler = {
             onJoinChannelSuccess: (connection) => {
               if (isMounted) {
                 setIsJoined(true);
@@ -151,7 +156,12 @@ const WatchRoomScreen = () => {
                 setRemoteUids((prev) => prev.filter((id) => id !== uid));
               }
             },
-          });
+            onError: (err, msg) => {
+              console.log('Agora Error:', err, msg);
+            }
+          };
+          agoraEventHandlerRef.current = eventHandler;
+          engine.registerEventHandler(eventHandler);
 
           engine.enableVideo();
           engine.enableAudio();
@@ -189,7 +199,13 @@ const WatchRoomScreen = () => {
       if (agoraEngineRef.current) {
         try {
           agoraEngineRef.current.leaveChannel();
-          agoraEngineRef.current.removeAllListeners();
+          if (agoraEventHandlerRef.current) {
+            if (typeof agoraEngineRef.current.unregisterEventHandler === 'function') {
+              agoraEngineRef.current.unregisterEventHandler(agoraEventHandlerRef.current);
+            } else if (typeof agoraEngineRef.current.removeAllListeners === 'function') {
+              agoraEngineRef.current.removeAllListeners();
+            }
+          }
         } catch (e) {
           console.warn('Error releasing Agora engine', e);
         }
