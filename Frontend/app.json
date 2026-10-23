@@ -29,6 +29,7 @@
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
         "VIBRATE",
+        "android.permission.VIBRATE",
         "RECORD_AUDIO",
         "CAMERA",
         "READ_EXTERNAL_STORAGE",

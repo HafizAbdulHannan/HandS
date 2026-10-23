@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  Alert, 
+  ActivityIndicator, 
+  StyleSheet, 
+  KeyboardAvoidingView, 
+  Platform,
+  Modal
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +20,10 @@ import { useThemeContext } from '../context/ThemeContext';
 const WatchLobbyScreen = () => {
   const [roomName, setRoomName] = useState('');
   const [roomCode, setRoomCode] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loadingModalVisible, setLoadingModalVisible] = useState(false);
+  const [loadingPhaseText, setLoadingPhaseText] = useState('Plz wait room is creating...');
+  const [loadingProgress, setLoadingProgress] = useState(25);
+
   const navigation = useNavigation();
   const { theme } = useThemeContext();
 
@@ -20,7 +34,10 @@ const WatchLobbyScreen = () => {
         return;
       }
       
-      setLoading(true);
+      setLoadingModalVisible(true);
+      setLoadingPhaseText('Plz wait room is creating...');
+      setLoadingProgress(30);
+      
       console.log('Sending request to /watch/create with roomName:', roomName);
       const response = await axiosInstance.post('/watch/create', { roomName });
       const room = response?.data?.room;
@@ -29,13 +46,25 @@ const WatchLobbyScreen = () => {
         throw new Error('Invalid room data received from server');
       }
 
+      setLoadingPhaseText('Engine is starting.....');
+      setLoadingProgress(70);
+
+      // Allow user to clearly see the Engine is starting phase
+      await new Promise(res => setTimeout(res, 900));
+
+      setLoadingPhaseText('100% Ready!');
+      setLoadingProgress(100);
+
+      // Brief delay so user sees 100% completion before entering room
+      await new Promise(res => setTimeout(res, 600));
+
       console.log('Room created successfully, navigating to WatchRoom:', room.roomCode);
+      setLoadingModalVisible(false);
       navigation.navigate('WatchRoom', { roomCode: room.roomCode, roomId: room._id, isHost: true });
     } catch (error) {
-      console.error('Crash Error in handleCreateRoom:', error);
-      Alert.alert('Crash Error', error.message || 'An unexpected error occurred during room creation');
-    } finally {
-      setLoading(false);
+      console.error('Error in handleCreateRoom:', error);
+      setLoadingModalVisible(false);
+      Alert.alert('Error', error.response?.data?.message || error.message || 'An unexpected error occurred during room creation');
     }
   };
 
@@ -45,16 +74,30 @@ const WatchLobbyScreen = () => {
       return;
     }
 
-    setLoading(true);
     try {
+      setLoadingModalVisible(true);
+      setLoadingPhaseText('Connecting to room...');
+      setLoadingProgress(35);
+
       const response = await axiosInstance.post('/watch/join', { roomCode });
       const room = response.data.room;
+
+      setLoadingPhaseText('Engine is starting.....');
+      setLoadingProgress(75);
+
+      await new Promise(res => setTimeout(res, 800));
+
+      setLoadingPhaseText('100% Ready!');
+      setLoadingProgress(100);
+
+      await new Promise(res => setTimeout(res, 500));
+
+      setLoadingModalVisible(false);
       navigation.navigate('WatchRoom', { roomCode: room.roomCode, roomId: room._id, isHost: false });
     } catch (error) {
       console.error('Error joining room:', error);
-      Alert.alert('Error', 'Failed to join room. Check the code and try again.');
-    } finally {
-      setLoading(false);
+      setLoadingModalVisible(false);
+      Alert.alert('Error', error.response?.data?.message || 'Failed to join room. Check the code and try again.');
     }
   };
 
@@ -89,9 +132,9 @@ const WatchLobbyScreen = () => {
             <TouchableOpacity 
               style={[styles.button, { backgroundColor: theme.colors.primary }]}
               onPress={handleCreateRoom}
-              disabled={loading}
+              disabled={loadingModalVisible}
             >
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Create Room</Text>}
+              <Text style={styles.buttonText}>Create Room</Text>
             </TouchableOpacity>
           </View>
 
@@ -118,14 +161,33 @@ const WatchLobbyScreen = () => {
             <TouchableOpacity 
               style={[styles.button, { backgroundColor: theme.colors.secondary || '#4facfe' }]}
               onPress={handleJoinRoom}
-              disabled={loading}
+              disabled={loadingModalVisible}
             >
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Join Room</Text>}
+              <Text style={styles.buttonText}>Join Room</Text>
             </TouchableOpacity>
           </View>
 
         </View>
       </KeyboardAvoidingView>
+
+      {/* Multi-Phase Loading Modal */}
+      <Modal
+        visible={loadingModalVisible}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.loadingOverlay}>
+          <View style={[styles.loadingBox, { backgroundColor: theme.colors.card }]}>
+            <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginBottom: 16 }} />
+            <Text style={[styles.loadingText, { color: theme.colors.text }]}>{loadingPhaseText}</Text>
+            
+            <View style={styles.progressBarBg}>
+              <View style={[styles.progressBarFill, { width: `${loadingProgress}%`, backgroundColor: theme.colors.primary }]} />
+            </View>
+            <Text style={[styles.progressPercent, { color: theme.colors.textSecondary }]}>{loadingProgress}%</Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -211,7 +273,48 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     fontSize: 14,
     fontWeight: 'bold',
-  }
+  },
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  loadingBox: {
+    width: '85%',
+    maxWidth: 320,
+    borderRadius: 20,
+    padding: 28,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  loadingText: {
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  progressBarBg: {
+    width: '100%',
+    height: 8,
+    backgroundColor: 'rgba(150, 150, 150, 0.25)',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  progressPercent: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
 });
 
 export default WatchLobbyScreen;

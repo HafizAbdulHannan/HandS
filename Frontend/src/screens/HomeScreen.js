@@ -729,8 +729,10 @@ export default function HomeScreen({ route }) {
               <TouchableOpacity
                 style={styles.miniFab}
                 activeOpacity={0.8}
-                onPressIn={sendHeartbeat}
-                onPressOut={() => setIsFabMenuOpen(false)}
+                onPress={() => {
+                  setIsFabMenuOpen(false);
+                  sendHeartbeat();
+                }}
               >
                 <Text style={styles.miniFabIcon}>💓</Text>
                 <Text style={styles.miniFabText}>Heartbeat</Text>

@@ -1,5 +1,22 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert, Modal, TextInput, StyleSheet, KeyboardAvoidingView, Platform, Share, RefreshControl, Image } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  ScrollView, 
+  Alert, 
+  Modal, 
+  TextInput, 
+  StyleSheet, 
+  KeyboardAvoidingView, 
+  Platform, 
+  Share, 
+  RefreshControl, 
+  Image, 
+  ActivityIndicator,
+  PermissionsAndroid, 
+  NativeModules 
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useSocket } from '../context/SocketContext';
@@ -12,21 +29,21 @@ import * as ImagePicker from 'expo-image-picker';
 import { Video } from 'expo-av';
 import FloatingEmojis from '../components/FloatingEmojis';
 import Toast from 'react-native-toast-message';
-import { PermissionsAndroid, NativeModules } from 'react-native';
 import Constants, { AppOwnership } from 'expo-constants';
 
 let createAgoraRtcEngine, ChannelProfileType, ClientRoleType, RtcSurfaceView;
-const isAgoraAvailable = !!NativeModules.AgoraRtcEngineModule;
-if (isAgoraAvailable) {
-  try {
+let isAgoraAvailable = false;
+try {
+  if (NativeModules.AgoraRtcNg || NativeModules.AgoraRtcEngineModule) {
     const agora = require('react-native-agora');
     createAgoraRtcEngine = agora.createAgoraRtcEngine || agora.default;
-    ChannelProfileType = agora.ChannelProfileType || { ChannelProfileLiveBroadcasting: 1 };
+    ChannelProfileType = agora.ChannelProfileType || { ChannelProfileLiveBroadcasting: 1, ChannelProfileCommunication: 0 };
     ClientRoleType = agora.ClientRoleType || { ClientRoleBroadcaster: 1, ClientRoleAudience: 2 };
     RtcSurfaceView = agora.RtcSurfaceView;
-  } catch (e) {
-    console.warn("Failed to load react-native-agora dynamically:", e);
+    isAgoraAvailable = !!createAgoraRtcEngine;
   }
+} catch (e) {
+  console.warn("Failed to load react-native-agora dynamically:", e);
 }
 
 const AGORA_APP_ID = '32e0688e8a9840579f3282e75ea6a9ac';
@@ -71,131 +88,114 @@ const WatchRoomScreen = () => {
   const reactionTimeoutRef = useRef(null);
   const videoPlayerRef = useRef(null);
 
-  const [loadingPhase, setLoadingPhase] = useState(0);
-  const [loadingText, setLoadingText] = useState('Plz wait room is creating...');
-  const [loadingProgress, setLoadingProgress] = useState(10);
+  const [loadingPhase, setLoadingPhase] = useState(isHost ? 3 : 0);
+  const [loadingText, setLoadingText] = useState(isHost ? 'Entering room...' : 'Connecting to room...');
+  const [loadingProgress, setLoadingProgress] = useState(isHost ? 100 : 30);
 
-  // Agora Initialization & Loading Sequence
+  // Agora Initialization Sequence
   useEffect(() => {
     let isMounted = true;
-    let timer1, timer2, timer3;
 
-    // Step 1: Room creating loading state
-    timer1 = setTimeout(() => {
-      if (!isMounted) return;
-      setLoadingPhase(1);
-      setLoadingText('Engine is starting.....');
-      setLoadingProgress(50);
+    const initEngine = async () => {
+      try {
+        if (Platform.OS === 'android') {
+          const permissions = [
+            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+            PermissionsAndroid.PERMISSIONS.CAMERA,
+          ];
+          if (Platform.Version >= 31 && PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) {
+            permissions.push(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
+          }
+          const validPermissions = permissions.filter(Boolean);
+          if (validPermissions.length > 0) {
+            const granted = await PermissionsAndroid.requestMultiple(validPermissions);
+            if (
+              granted['android.permission.RECORD_AUDIO'] !== PermissionsAndroid.RESULTS.GRANTED ||
+              granted['android.permission.CAMERA'] !== PermissionsAndroid.RESULTS.GRANTED
+            ) {
+              console.warn('Camera/Mic permissions not granted');
+            } else {
+              if (isMounted) setIsPermissionsGranted(true);
+            }
+          }
+        } else {
+          if (isMounted) setIsPermissionsGranted(true);
+        }
 
-      // Step 2: Initialize Agora
-      timer2 = setTimeout(async () => {
-        if (!isMounted) return;
+        if (!isAgoraAvailable || !createAgoraRtcEngine) {
+          console.warn("Agora native module is missing or unavailable. Skipping initialization.");
+          if (isMounted) setLoadingPhase(3);
+          return;
+        }
+
+        if (Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient') {
+          console.warn("Agora native module is not available in Expo Go. Skipping initialization.");
+          if (isMounted) setLoadingPhase(3);
+          return;
+        }
+
+        if (!globalAgoraEngine) {
+          globalAgoraEngine = createAgoraRtcEngine();
+          globalAgoraEngine.initialize({ 
+            appId: AGORA_APP_ID,
+            channelProfile: ChannelProfileType?.ChannelProfileCommunication ?? 0
+          });
+        }
+        const engine = globalAgoraEngine;
+        agoraEngineRef.current = engine;
         
+        const eventHandler = {
+          onJoinChannelSuccess: (connection) => {
+            if (isMounted) {
+              setIsJoined(true);
+              setLocalUid(connection.localUid);
+            }
+          },
+          onUserJoined: (_connection, uid) => {
+            if (isMounted) {
+              setRemoteUids((prev) => prev.includes(uid) ? prev : [...prev, uid]);
+            }
+          },
+          onUserOffline: (_connection, uid) => {
+            if (isMounted) {
+              setRemoteUids((prev) => prev.filter((id) => id !== uid));
+            }
+          },
+          onError: (err, msg) => {
+            console.log('Agora Error:', err, msg);
+          }
+        };
+        agoraEventHandlerRef.current = eventHandler;
+        engine.registerEventHandler(eventHandler);
+
         try {
-          if (Platform.OS === 'android') {
-            const permissions = [
-              PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-              PermissionsAndroid.PERMISSIONS.CAMERA,
-            ];
-            if (Platform.Version >= 31 && PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT) {
-              permissions.push(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
-            }
-            const validPermissions = permissions.filter(Boolean);
-            if (validPermissions.length > 0) {
-              const granted = await PermissionsAndroid.requestMultiple(validPermissions);
-              if (
-                granted['android.permission.RECORD_AUDIO'] !== PermissionsAndroid.RESULTS.GRANTED ||
-                granted['android.permission.CAMERA'] !== PermissionsAndroid.RESULTS.GRANTED
-              ) {
-                console.warn('Permissions not granted');
-                Toast.show({ type: 'error', text1: 'Permissions Required', text2: 'Please grant camera and mic permissions to join the room.' });
-                return;
-              }
-            }
-            if (isMounted) setIsPermissionsGranted(true);
-          } else {
-            if (isMounted) setIsPermissionsGranted(true);
-          }
-
-          const { NativeModules } = require('react-native');
-          if (!NativeModules.AgoraRtcEngineModule || !isAgoraAvailable || !createAgoraRtcEngine) {
-             console.warn("Agora native module is missing or unavailable. Skipping initialization.");
-             return;
-          }
-
-          if (Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient') {
-             console.warn("Agora native module is not available in Expo Go. Skipping initialization.");
-             return;
-          }
-
-          if (!globalAgoraEngine) {
-            globalAgoraEngine = createAgoraRtcEngine();
-            // In v4, passing channelProfile might be required to prevent native crashes on certain SDKs
-            globalAgoraEngine.initialize({ 
-              appId: AGORA_APP_ID,
-              channelProfile: ChannelProfileType?.ChannelProfileLiveBroadcasting || 1
-            });
-          }
-          const engine = globalAgoraEngine;
-          agoraEngineRef.current = engine;
-          
-          const eventHandler = {
-            onJoinChannelSuccess: (connection) => {
-              if (isMounted) {
-                setIsJoined(true);
-                setLocalUid(connection.localUid);
-              }
-            },
-            onUserJoined: (_connection, uid) => {
-              if (isMounted) {
-                setRemoteUids((prev) => prev.includes(uid) ? prev : [...prev, uid]);
-              }
-            },
-            onUserOffline: (_connection, uid) => {
-              if (isMounted) {
-                setRemoteUids((prev) => prev.filter((id) => id !== uid));
-              }
-            },
-            onError: (err, msg) => {
-              console.log('Agora Error:', err, msg);
-            }
-          };
-          agoraEventHandlerRef.current = eventHandler;
-          engine.registerEventHandler(eventHandler);
-
           engine.enableVideo();
           engine.enableAudio();
           engine.muteLocalAudioStream(true);
           engine.muteLocalVideoStream(true);
 
           engine.joinChannel('', roomCode, 0, {
-            channelProfile: ChannelProfileType?.ChannelProfileCommunication || 0,
-            clientRoleType: ClientRoleType?.ClientRoleBroadcaster || 1,
+            channelProfile: ChannelProfileType?.ChannelProfileCommunication ?? 0,
+            clientRoleType: ClientRoleType?.ClientRoleBroadcaster ?? 1,
           });
-          
-          if (isMounted) setIsEngineInitialized(true);
-        } catch (engineError) {
-          console.warn('Agora engine failed to initialize:', engineError);
-        } finally {
-          if (isMounted) {
-            setLoadingPhase(2);
-            setLoadingText('100% Ready!');
-            setLoadingProgress(100);
-            
-            timer3 = setTimeout(() => {
-              if (isMounted) setLoadingPhase(3); // Done
-            }, 800);
-          }
+        } catch (callErr) {
+          console.warn('Agora joinChannel error:', callErr);
         }
-      }, 500);
-    }, 1500);
+        
+        if (isMounted) setIsEngineInitialized(true);
+      } catch (engineError) {
+        console.warn('Agora engine failed to initialize:', engineError);
+      } finally {
+        if (isMounted) {
+          setLoadingPhase(3);
+        }
+      }
+    };
+
+    initEngine();
 
     return () => {
       isMounted = false;
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-      
       if (agoraEngineRef.current) {
         try {
           agoraEngineRef.current.leaveChannel();

@@ -53,31 +53,43 @@ export const SocketProvider = ({ children }) => {
       Toast.show({ type: 'info', text1: title, text2: message, position: 'top' });
     });
 
+  const triggerHeartbeatVibration = () => {
+    try {
+      if (Platform.OS === 'android') {
+        Vibration.cancel();
+        // Realistic Heartbeat Rhythm: lub-dub ... lub-dub ... lub-dub
+        Vibration.vibrate([0, 120, 120, 220, 600, 120, 120, 220, 600, 120, 120, 220]);
+      } else {
+        // iOS Haptic simulation of lub-dub
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 180);
+        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 940);
+        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 1120);
+        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 1880);
+        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 2060);
+      }
+    } catch (err) {
+      console.warn('Vibration failed:', err);
+    }
+  };
+
     // Listen for Heartbeat
     newSocket.on('receive_heartbeat', ({ senderName }) => {
       console.log('Heartbeat Socket Received');
-      // Universal Vibration for all Androids
-      try {
-        Vibration.cancel();
-        Vibration.vibrate([0, 150, 150, 300, 800, 150, 150, 300]);
-        if (Platform.OS !== 'android') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }
-      } catch (err) {
-        console.error('Vibration failed', err);
-      }
-
+      triggerHeartbeatVibration();
       Toast.show({ type: 'info', text1: 'Heartbeat! 💓', text2: `${senderName || 'Your partner'} sent a heartbeat!`, position: 'top' });
-
       setAnimationType('heartbeat');
       setTimeout(() => setAnimationType(null), 3000);
     });
 
     // Check for pending animation on load
     if (user?.pendingAnimation) {
-      if (user.pendingAnimation === 'love_you' || user.pendingAnimation === 'miss_you') {
+      if (user.pendingAnimation === 'love_you' || user.pendingAnimation === 'miss_you' || user.pendingAnimation === 'heartbeat') {
+        if (user.pendingAnimation === 'heartbeat') {
+          triggerHeartbeatVibration();
+        }
         setAnimationType(user.pendingAnimation);
-        setTimeout(() => setAnimationType(null), 5000);
+        setTimeout(() => setAnimationType(null), user.pendingAnimation === 'heartbeat' ? 3000 : 5000);
         // Clear it on backend
         axiosInstance.post('/auth/clear-animation').catch(e => console.log('Error clearing animation', e));
       }
@@ -113,22 +125,19 @@ export const SocketProvider = ({ children }) => {
   };
 
   const sendHeartbeat = () => {
+    // Immediate vibration & animation for sender
+    triggerHeartbeatVibration();
+    setAnimationType('heartbeat');
+    setTimeout(() => setAnimationType(null), 3000);
+
     if (socket && user?.partner) {
       const partnerId = typeof user.partner === 'object' ? user.partner._id : user.partner;
       const userId = user._id;
       const room = [userId, partnerId].sort().join('_');
       socket.emit('send_heartbeat', { room, partnerId, senderId: userId, senderName: user?.fullName || user?.username });
-      
-      // Visual & Haptic feedback for sender
-      try {
-        Vibration.cancel();
-        Vibration.vibrate([0, 150, 150, 300, 800, 150, 150, 300]); 
-      } catch (e) {
-        console.log(e);
-      }
-
-      setAnimationType('heartbeat');
-      setTimeout(() => setAnimationType(null), 3000);
+      Toast.show({ type: 'success', text1: 'Heartbeat Sent! 💓', text2: 'Your partner is feeling your heartbeat.' });
+    } else if (!user?.partner) {
+      Toast.show({ type: 'info', text1: 'Heartbeat! 💓', text2: 'Connect with a partner to send heartbeats.' });
     }
   };
 

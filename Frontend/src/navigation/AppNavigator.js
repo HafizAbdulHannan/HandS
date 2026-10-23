@@ -98,22 +98,9 @@ function MainTabs() {
       };
       socket.on('receive_watch_invite', handleWatchInvite);
 
-      const handleHeartbeat = async () => {
-        try {
-          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-          setTimeout(async () => {
-            try { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch (e) {}
-          }, 200);
-        } catch (error) {
-          console.log('Haptics failed', error);
-        }
-      };
-      socket.on('receive_heartbeat', handleHeartbeat);
-
       return () => {
         socket.off('receive_notification', handleNewNotification);
         socket.off('receive_watch_invite', handleWatchInvite);
-        socket.off('receive_heartbeat', handleHeartbeat);
       };
     }
   }, [socket, user, navigation]);
