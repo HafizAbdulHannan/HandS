@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import axiosInstance from '../api/axiosConfig';
+import axiosInstance, { getMediaUrl } from '../api/axiosConfig';
 import { useAuth } from '../context/AuthContext';
+import { useThemeContext } from '../context/ThemeContext';
 import Toast from 'react-native-toast-message';
 
 export default function NotificationScreen() {
   const navigation = useNavigation();
   const { loadUser } = useAuth();
+  const { theme, isDarkMode } = useThemeContext();
   const [requests, setRequests] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -51,7 +53,7 @@ export default function NotificationScreen() {
       if (loadUser) await loadUser();
     } catch (error) {
       console.log('Accept error:', error);
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to accept request' });
+      Toast.show({ type: 'error', text1: 'Error', text2: error.response?.data?.message || 'Failed to accept request' });
     }
   };
 
@@ -79,29 +81,42 @@ export default function NotificationScreen() {
   const renderItem = ({ item }) => {
     if (item.viewType === 'request') {
       return (
-        <View style={styles.notificationCard}>
-          <View style={styles.iconPlaceholder}>
-            <Text style={styles.iconText}>💖</Text>
+        <View style={[styles.notificationCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.primary, borderWidth: 1 }]}>
+          <View style={[styles.iconPlaceholder, { overflow: 'hidden' }]}>
+            {item.sender?.avatar ? (
+              <Image source={{ uri: getMediaUrl(item.sender.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+            ) : (
+              <Text style={styles.iconText}>💖</Text>
+            )}
           </View>
           <View style={styles.textContainer}>
-            <Text style={styles.title}>Pairing Request</Text>
-            <Text style={styles.description}>{item.sender?.username} wants to connect with you.</Text>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Pairing Request</Text>
+            <Text style={[styles.description, { color: theme.colors.textSecondary }]}>
+              {item.sender?.fullName || item.sender?.username} (@{item.sender?.username}) wants to connect with you.
+            </Text>
             <View style={styles.actionButtons}>
               <TouchableOpacity style={styles.acceptButton} onPress={() => handleAccept(item._id)}>
                 <Text style={styles.buttonText}>Accept</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.rejectButton} onPress={() => handleReject(item._id)}>
-                <Text style={styles.buttonText}>Reject</Text>
+              <TouchableOpacity style={[styles.rejectButton, { backgroundColor: theme.colors.inputBackground }]} onPress={() => handleReject(item._id)}>
+                <Text style={[styles.buttonText, { color: theme.colors.textSecondary }]}>Reject</Text>
               </TouchableOpacity>
             </View>
           </View>
-          <Text style={styles.time}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+          <Text style={[styles.time, { color: theme.colors.textSecondary }]}>{new Date(item.createdAt).toLocaleDateString()}</Text>
         </View>
       );
     } else {
+      const unreadBg = isDarkMode ? 'rgba(255, 107, 129, 0.14)' : '#fff0f3';
+      const unreadBorder = isDarkMode ? 'rgba(255, 107, 129, 0.35)' : '#ffd1dc';
       return (
         <TouchableOpacity 
-          style={[styles.notificationCard, item.read ? styles.readCard : styles.unreadCard]}
+          style={[
+            styles.notificationCard,
+            item.read
+              ? { backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border }
+              : { backgroundColor: unreadBg, borderWidth: 1, borderColor: unreadBorder }
+          ]}
           onPress={() => {
             handleMarkAsRead(item._id, item.read);
             if (item.type === 'drawing' && item.referenceId) {
@@ -117,10 +132,10 @@ export default function NotificationScreen() {
             </Text>
           </View>
           <View style={styles.textContainer}>
-            <Text style={styles.title}>{item.title}</Text>
-            <Text style={styles.description}>{item.message}</Text>
+            <Text style={[styles.title, { color: theme.colors.text }]}>{item.title}</Text>
+            <Text style={[styles.description, { color: theme.colors.textSecondary }]}>{item.message}</Text>
           </View>
-          <Text style={styles.time}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+          <Text style={[styles.time, { color: theme.colors.textSecondary }]}>{new Date(item.createdAt).toLocaleDateString()}</Text>
         </TouchableOpacity>
       );
     }
@@ -140,19 +155,19 @@ export default function NotificationScreen() {
   }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Notifications</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
+      <View style={[styles.header, { backgroundColor: theme.colors.background }]}>
+        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Notifications</Text>
       </View>
       <FlatList
         data={combinedData}
         keyExtractor={item => item._id}
         renderItem={renderItem}
         contentContainerStyle={styles.listContainer}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No new notifications</Text>
+            <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>No new notifications</Text>
           </View>
         }
       />
@@ -163,18 +178,15 @@ export default function NotificationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
   },
   header: {
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 10,
-    backgroundColor: '#ffffff',
   },
   headerTitle: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#1a1a1a',
   },
   listContainer: {
     padding: 20,
@@ -187,44 +199,32 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 12,
   },
-  readCard: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#eee',
-  },
-  unreadCard: {
-    backgroundColor: '#f0f7ff',
-    borderWidth: 1,
-    borderColor: '#cce4ff',
-  },
   iconPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#ffeaa7',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 107, 129, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
   iconText: {
-    fontSize: 18,
+    fontSize: 20,
   },
   textContainer: {
     flex: 1,
+    paddingRight: 50,
   },
   title: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
     marginBottom: 4,
   },
   description: {
     fontSize: 14,
-    color: '#666',
   },
   time: {
-    fontSize: 12,
-    color: '#aaa',
+    fontSize: 11,
     position: 'absolute',
     top: 16,
     right: 16,
@@ -241,7 +241,6 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   rejectButton: {
-    backgroundColor: '#ddd',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -256,7 +255,6 @@ const styles = StyleSheet.create({
     marginTop: 50,
   },
   emptyText: {
-    color: '#888',
     fontSize: 16,
   }
 });

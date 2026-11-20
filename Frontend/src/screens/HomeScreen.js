@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, TextInput, ActivityIndicator, Platform, Alert, Modal, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, TextInput, ActivityIndicator, Platform, Alert, Modal, KeyboardAvoidingView, Linking } from 'react-native';
 import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Video } from 'expo-av';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
+import axiosInstance, { getMediaUrl } from '../api/axiosConfig';
 import FloatingEmojis from '../components/FloatingEmojis';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -16,7 +17,7 @@ import * as NavigationBar from 'expo-navigation-bar';
 import Toast from 'react-native-toast-message';
 
 export default function HomeScreen({ route }) {
-  const { socket, sendMissYou, sendLoveYou, sendHeartbeat, sendNotification, animationType } = useSocket();
+  const { sendMissYou, sendLoveYou, sendHeartbeat, sendNotification, animationType } = useSocket();
   const { user } = useAuth();
   const { theme } = useThemeContext();
   const navigation = useNavigation();
@@ -29,15 +30,13 @@ export default function HomeScreen({ route }) {
   useFocusEffect(
     React.useCallback(() => {
       if (Platform.OS === 'android') {
-        NavigationBar.setBackgroundColorAsync(theme.colors.background);
+        NavigationBar.setBackgroundColorAsync(theme.colors.background).catch(() => {});
       }
     }, [theme.colors.background])
   );
 
-  const [selectedMediaType, setSelectedMediaType] = useState('none');
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [partner, setPartner] = useState(null);
-  const [partnerData, setPartnerData] = useState(null);
 
   const [dailyQuestion, setDailyQuestion] = useState(null);
   const [myAnswerInput, setMyAnswerInput] = useState('');
@@ -58,8 +57,14 @@ export default function HomeScreen({ route }) {
 
   const flatListRef = React.useRef(null);
 
+  const filteredPosts = posts.filter(post => {
+    const matchesSearch = post.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.author?.username?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
+  });
+
   useEffect(() => {
-    if (route?.params?.highlightPostId && posts.length > 0) {
+    if (route?.params?.highlightPostId && filteredPosts.length > 0) {
       const index = filteredPosts.findIndex(p => p._id === route.params.highlightPostId);
       if (index !== -1) {
         setTimeout(() => {
@@ -74,13 +79,11 @@ export default function HomeScreen({ route }) {
       try {
         const response = await axiosInstance.get('/pairing/partner');
         setPartner(response.data);
-        setPartnerData(response.data);
       } catch (error) {
         console.log('Error fetching partner:', error);
       }
     } else {
       setPartner(null);
-      setPartnerData(null);
     }
   };
 
@@ -134,13 +137,13 @@ export default function HomeScreen({ route }) {
     setRefreshing(false);
   };
 
-  const handleLike = async (postId, currentLikes) => {
-    const userId = user._id;
+  const handleLike = async (postId, currentLikes = []) => {
+    const userId = user?._id;
     const isLiked = currentLikes.includes(userId);
 
     setPosts(posts.map(post => {
       if (post._id === postId) {
-        let newLikes = [...post.likes];
+        let newLikes = [...(post.likes || [])];
         if (isLiked) {
           newLikes = newLikes.filter(id => id !== userId);
         } else {
@@ -192,6 +195,7 @@ export default function HomeScreen({ route }) {
     setIsSubmittingAnswer(true);
     try {
       await axiosInstance.post('/questions/answer', { questionId: dailyQuestion._id, answer: myAnswerInput });
+      setMyAnswerInput('');
       await fetchDailyQuestion();
       Toast.show({ type: 'success', text1: 'Answer submitted!' });
     } catch (error) {
@@ -206,8 +210,8 @@ export default function HomeScreen({ route }) {
     try {
       const res = await axiosInstance.post('/pets/interact', { action });
       setSharedPet(res.data);
-      if (action === 'feed') Toast.show({ type: 'success', text1: 'Yum! Pet fed.' });
-      if (action === 'play') Toast.show({ type: 'success', text1: 'Pet is happy!' });
+      if (action === 'feed') Toast.show({ type: 'success', text1: 'Yum! Pet fed. 🥩' });
+      if (action === 'play') Toast.show({ type: 'success', text1: 'Pet is happy! 🎾' });
     } catch (error) {
       console.log('Error interacting with pet', error);
     }
@@ -269,13 +273,12 @@ export default function HomeScreen({ route }) {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 1, // Pick full quality, we compress manually
+      quality: 1,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const asset = result.assets[0];
       try {
-        // Resize to 600x600 max - results in ~30-80KB payload for slow connections
         const manipulated = await ImageManipulator.manipulateAsync(
           asset.uri,
           [{ resize: { width: 600, height: 600 } }],
@@ -288,7 +291,6 @@ export default function HomeScreen({ route }) {
           type: 'image',
           base64String: `data:image/jpeg;base64,${manipulated.base64}`
         });
-        setSelectedMediaType('image');
       } catch (e) {
         console.log('Image manipulator error:', e);
         Toast.show({ type: 'error', text1: 'Error', text2: 'Could not process image' });
@@ -311,7 +313,6 @@ export default function HomeScreen({ route }) {
         mimeType: asset.mimeType || 'video/mp4',
         type: 'video'
       });
-      setSelectedMediaType('video');
     }
   };
 
@@ -329,7 +330,6 @@ export default function HomeScreen({ route }) {
         mimeType: asset.mimeType || 'application/octet-stream',
         type: 'file'
       });
-      setSelectedMediaType('file');
     }
   };
 
@@ -362,12 +362,10 @@ export default function HomeScreen({ route }) {
         mediaType: selectedMedia ? selectedMedia.type : 'none'
       });
 
-      // Notify partner
       sendNotification('New Memory Added! 💖', `${user?.username || 'Your partner'} just posted a new memory.`);
 
       setNewPostContent('');
       setSelectedMedia(null);
-      setSelectedMediaType('none');
       fetchPosts();
       Toast.show({ type: 'success', text1: 'Posted!', text2: 'Your memory has been shared.' });
     } catch (error) {
@@ -378,19 +376,64 @@ export default function HomeScreen({ route }) {
     }
   };
 
-  const filteredPosts = posts.filter(post => {
-    const matchesSearch = post.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      post.author?.username?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch;
-  });
+  const renderPostMedia = (item) => {
+    if (!item.mediaUrl || item.mediaType === 'none') return null;
+    const resolvedUrl = getMediaUrl(item.mediaUrl);
+
+    if (item.mediaType === 'image' || item.mediaType === 'drawing') {
+      return (
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => {
+            if (item.mediaType === 'drawing') {
+              navigation.navigate('DrawFunReply', { postId: item._id });
+            }
+          }}
+        >
+          <Image source={{ uri: resolvedUrl }} style={styles.postImage} />
+        </TouchableOpacity>
+      );
+    }
+
+    if (item.mediaType === 'video') {
+      return (
+        <Video
+          source={{ uri: resolvedUrl }}
+          style={styles.postImage}
+          useNativeControls
+          resizeMode="contain"
+        />
+      );
+    }
+
+    if (item.mediaType === 'file') {
+      const fileName = item.mediaUrl.split('/').pop() || 'Attached Document';
+      return (
+        <TouchableOpacity
+          style={[styles.fileAttachmentBox, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]}
+          onPress={() => Linking.openURL(resolvedUrl).catch(() => Toast.show({ type: 'error', text1: 'Could not open file' }))}
+        >
+          <Ionicons name="document-text" size={28} color={theme.colors.primary} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[styles.fileAttachmentName, { color: theme.colors.text }]} numberOfLines={1}>{fileName}</Text>
+            <Text style={{ fontSize: 12, color: theme.colors.textSecondary }}>Tap to view document</Text>
+          </View>
+          <Ionicons name="open-outline" size={20} color={theme.colors.textSecondary} />
+        </TouchableOpacity>
+      );
+    }
+
+    return null;
+  };
 
   const headerComponent = (
     <View style={styles.listHeader}>
       {!user?.partner && (
-        <View style={styles.noPartnerBanner}>
+        <TouchableOpacity style={styles.noPartnerBanner} onPress={() => navigation.navigate('Pairing')} activeOpacity={0.8}>
           <Ionicons name="information-circle" size={24} color="#ff6b81" />
-          <Text style={styles.noPartnerText}>Connect with partner to see their feed.</Text>
-        </View>
+          <Text style={styles.noPartnerText}>Connect with your partner to share your feed and unlock features.</Text>
+          <Ionicons name="chevron-forward" size={18} color="#ff6b81" />
+        </TouchableOpacity>
       )}
 
       {user?.partner && dailyQuestion && (
@@ -403,13 +446,13 @@ export default function HomeScreen({ route }) {
 
           {dailyQuestion.myAnswer ? (
             <View style={styles.answersContainer}>
-              <View style={styles.answerBox}>
+              <View style={[styles.answerBox, { backgroundColor: theme.colors.inputBackground }]}>
                 <Text style={styles.answerAuthor}>You</Text>
-                <Text style={[styles.answerText, { color: theme.colors.textSecondary }]}>{dailyQuestion.myAnswer}</Text>
+                <Text style={[styles.answerText, { color: theme.colors.text }]}>{dailyQuestion.myAnswer}</Text>
               </View>
-              <View style={[styles.answerBox, { marginTop: 10 }]}>
-                <Text style={styles.answerAuthor}>{partnerData?.username || 'Partner'}</Text>
-                <Text style={[styles.answerText, { color: theme.colors.textSecondary }]}>
+              <View style={[styles.answerBox, { marginTop: 10, backgroundColor: theme.colors.inputBackground }]}>
+                <Text style={styles.answerAuthor}>{partner?.username || 'Partner'}</Text>
+                <Text style={[styles.answerText, { color: theme.colors.text }]}>
                   {dailyQuestion.partnerAnswer === 'HIDDEN' ? 'Has not answered yet...' : dailyQuestion.partnerAnswer || 'Has not answered yet...'}
                 </Text>
               </View>
@@ -438,7 +481,7 @@ export default function HomeScreen({ route }) {
             <Text style={styles.petEmoji}>{sharedPet.type === 'dog' ? '🐶' : sharedPet.type === 'cat' ? '🐱' : '🪴'}</Text>
             <View style={styles.petInfo}>
               <Text style={[styles.petName, { color: theme.colors.text }]}>{sharedPet.name} <Text style={styles.petLevel}>Lvl {sharedPet.level}</Text></Text>
-              <View style={styles.healthBarContainer}>
+              <View style={[styles.healthBarContainer, { backgroundColor: theme.colors.inputBackground }]}>
                 <View style={[styles.healthBar, { width: `${sharedPet.health}%`, backgroundColor: sharedPet.health > 50 ? '#4CD964' : '#FF3B30' }]} />
               </View>
             </View>
@@ -456,13 +499,13 @@ export default function HomeScreen({ route }) {
 
       <View style={[styles.postCreatorBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, shadowColor: theme.colors.text }]}>
         <View style={styles.postCreatorHeader}>
-          <View style={[styles.currentUserAvatar, { overflow: 'hidden' }]}>
+          <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={[styles.currentUserAvatar, { overflow: 'hidden' }]}>
             {user?.avatar ? (
               <Image source={{ uri: getMediaUrl(user.avatar) }} style={styles.headerProfileImage} />
             ) : (
               <Text style={styles.currentUserInitial}>{user?.username?.charAt(0).toUpperCase() || 'U'}</Text>
             )}
-          </View>
+          </TouchableOpacity>
           <TextInput
             style={[styles.postInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
             placeholder="Share a memory, video, or document..."
@@ -474,22 +517,22 @@ export default function HomeScreen({ route }) {
         </View>
 
         {selectedMedia && (
-          <View style={styles.previewContainer}>
+          <View style={[styles.previewContainer, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]}>
             {selectedMedia.type === 'image' ? (
               <Image source={{ uri: selectedMedia.uri }} style={styles.previewImage} />
             ) : (
               <View style={styles.previewIconBox}>
                 <Ionicons name={selectedMedia.type === 'video' ? 'videocam' : 'document'} size={32} color="#ff6b81" />
-                <Text style={styles.previewText} numberOfLines={1}>{selectedMedia.name}</Text>
+                <Text style={[styles.previewText, { color: theme.colors.text }]} numberOfLines={1}>{selectedMedia.name}</Text>
               </View>
             )}
-            <TouchableOpacity style={styles.cancelPreviewBtn} onPress={() => { setSelectedMedia(null); setSelectedMediaType('none'); }}>
+            <TouchableOpacity style={styles.cancelPreviewBtn} onPress={() => setSelectedMedia(null)}>
               <Ionicons name="close" size={16} color="#fff" />
             </TouchableOpacity>
           </View>
         )}
 
-        <View style={styles.postActionsRow}>
+        <View style={[styles.postActionsRow, { borderTopColor: theme.colors.border }]}>
           <TouchableOpacity style={styles.postActionBtn} onPress={pickImage}>
             <Ionicons name="image-outline" size={22} color={theme.colors.primary} />
             <Text style={[styles.postActionText, { color: theme.colors.textSecondary }]}>Photo</Text>
@@ -605,14 +648,14 @@ export default function HomeScreen({ route }) {
             )
           }
           keyboardShouldPersistTaps="handled"
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
           renderItem={({ item, index }) => (
             <Animated.View
               entering={FadeInUp.delay(index * 100)}
               layout={Layout.springify()}
               style={[
                 styles.postCard,
-                { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border },
+                { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
                 route?.params?.highlightPostId === item._id && { borderColor: '#ff6b81', borderWidth: 2 }
               ]}
             >
@@ -638,7 +681,7 @@ export default function HomeScreen({ route }) {
               {editingPostId === item._id ? (
                 <View style={styles.editPostContainer}>
                   <TextInput
-                    style={[styles.editPostInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
+                    style={[styles.editPostInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text, borderColor: theme.colors.border }]}
                     value={editContent}
                     onChangeText={setEditContent}
                     multiline
@@ -656,13 +699,11 @@ export default function HomeScreen({ route }) {
                 item.content ? <Text style={[styles.postText, { color: theme.colors.text }]}>{item.content}</Text> : null
               )}
 
-              {item.mediaUrl && item.mediaType === 'image' && (
-                <Image source={{ uri: getMediaUrl(item.mediaUrl) }} style={styles.postImage} />
-              )}
+              {renderPostMedia(item)}
 
-              <View style={styles.postFooter}>
+              <View style={[styles.postFooter, { borderTopColor: theme.colors.border }]}>
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(item._id, item.likes)}>
-                  <Ionicons name={item.likes?.includes(user._id) ? "heart" : "heart-outline"} size={24} color={item.likes?.includes(user._id) ? "#ff6b81" : theme.colors.textSecondary} />
+                  <Ionicons name={item.likes?.includes(user?._id) ? "heart" : "heart-outline"} size={24} color={item.likes?.includes(user?._id) ? "#ff6b81" : theme.colors.textSecondary} />
                   <Text style={[styles.actionText, { color: theme.colors.textSecondary }]}>{item.likes?.length || 0}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionButton} onPress={() => { setActiveCommentPostId(activeCommentPostId === item._id ? null : item._id); setCommentText(''); }}>
@@ -672,9 +713,9 @@ export default function HomeScreen({ route }) {
               </View>
 
               {activeCommentPostId === item._id && (
-                <View style={styles.commentSection}>
-                  {item.comments?.map((comment, index) => (
-                    <View key={index} style={styles.commentItem}>
+                <View style={[styles.commentSection, { borderTopColor: theme.colors.border }]}>
+                  {item.comments?.map((comment, idx) => (
+                    <View key={idx} style={[styles.commentItem, { backgroundColor: theme.colors.inputBackground }]}>
                       <Text style={[styles.commentAuthor, { color: theme.colors.text }]}>{comment.user?.username || 'User'}</Text>
                       <Text style={[styles.commentText, { color: theme.colors.textSecondary }]}>{comment.text}</Text>
                     </View>
@@ -711,7 +752,7 @@ export default function HomeScreen({ route }) {
           {isFabMenuOpen && (
             <View style={styles.miniFabMenu}>
               <TouchableOpacity
-                style={styles.miniFab}
+                style={[styles.miniFab, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1 }]}
                 activeOpacity={0.8}
                 onPress={() => { setIsFabMenuOpen(false); sendLoveYou(); }}
               >
@@ -719,7 +760,7 @@ export default function HomeScreen({ route }) {
                 <Text style={styles.miniFabText}>Love You</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.miniFab}
+                style={[styles.miniFab, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1 }]}
                 activeOpacity={0.8}
                 onPress={() => { setIsFabMenuOpen(false); sendMissYou(); }}
               >
@@ -727,7 +768,7 @@ export default function HomeScreen({ route }) {
                 <Text style={styles.miniFabText}>Miss You</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.miniFab}
+                style={[styles.miniFab, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1 }]}
                 activeOpacity={0.8}
                 onPress={() => {
                   setIsFabMenuOpen(false);
@@ -777,16 +818,7 @@ export default function HomeScreen({ route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fcfcfc',
   },
-  heartsOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 999,
-    justifyContent: 'center',
-    alignItems: 'center',
-    pointerEvents: 'none',
-  },
-  lottieHearts: { width: 300, height: 300 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -794,16 +826,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 10,
-    backgroundColor: '#fcfcfc',
   },
   title: {
     fontSize: 34,
     fontWeight: '800',
-    color: '#1a1a1a',
-  },
-  profileContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   heartIconContainer: {
     marginHorizontal: 8,
@@ -916,7 +942,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   answerBox: {
-    backgroundColor: '#f1f3f5',
     padding: 12,
     borderRadius: 12,
   },
@@ -962,7 +987,6 @@ const styles = StyleSheet.create({
   },
   healthBarContainer: {
     height: 8,
-    backgroundColor: '#f1f3f5',
     borderRadius: 4,
     overflow: 'hidden',
   },
@@ -975,7 +999,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
   },
   petBtn: {
-    backgroundColor: '#fff0f3',
+    backgroundColor: 'rgba(255, 107, 129, 0.12)',
     paddingVertical: 8,
     paddingHorizontal: 20,
     borderRadius: 20,
@@ -993,7 +1017,6 @@ const styles = StyleSheet.create({
     minHeight: 60,
     textAlignVertical: 'top',
     borderWidth: 1,
-    borderColor: '#e1e1e1',
   },
   editPostActions: {
     flexDirection: 'row',
@@ -1032,16 +1055,9 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
     borderRadius: 12,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
   },
   connectPartnerBtn: {
     flexDirection: 'row',
@@ -1069,7 +1085,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     fontSize: 16,
-    color: '#333',
   },
   feed: {
     paddingHorizontal: 20,
@@ -1081,22 +1096,21 @@ const styles = StyleSheet.create({
   noPartnerBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff0f3',
+    backgroundColor: 'rgba(255, 107, 129, 0.12)',
     padding: 16,
     borderRadius: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 107, 129, 0.2)',
+    borderColor: 'rgba(255, 107, 129, 0.25)',
   },
   noPartnerText: {
     marginLeft: 10,
     color: '#ff6b81',
     fontWeight: '600',
-    fontSize: 15,
+    fontSize: 14,
     flex: 1,
   },
   postCreatorBox: {
-    backgroundColor: '#ffffff',
     borderRadius: 24,
     padding: 18,
     marginHorizontal: 4,
@@ -1117,7 +1131,7 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 23,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#ff6b81',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -1142,8 +1156,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     borderWidth: 1,
-    borderColor: '#eee',
-    backgroundColor: '#f8f9fa',
     height: 120,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1160,7 +1172,6 @@ const styles = StyleSheet.create({
   },
   previewText: {
     marginTop: 8,
-    color: '#555',
     fontSize: 12,
     fontWeight: '500',
     maxWidth: '90%',
@@ -1182,7 +1193,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
     paddingTop: 15,
     marginTop: 10,
   },
@@ -1208,46 +1218,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-  postActionBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#f1f1f1',
-    paddingTop: 12,
-  },
-  mediaIcons: {
-    flexDirection: 'row',
-  },
-  mediaIconButton: {
-    padding: 8,
-    marginRight: 8,
-    borderRadius: 20,
-  },
-  mediaIconSelected: {
-    backgroundColor: '#fff0f3',
-  },
-  postButton: {
-    backgroundColor: '#ff6b81',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-  postButtonDisabled: {
-    backgroundColor: '#ffb5c1',
-  },
-  postButtonText: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-    fontSize: 15,
-  },
   postCard: {
-    backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
@@ -1276,57 +1251,42 @@ const styles = StyleSheet.create({
   postAuthor: {
     fontWeight: 'bold',
     fontSize: 17,
-    color: '#1a1a1a',
     marginBottom: 2,
   },
   postTime: {
     fontSize: 13,
-    color: '#888'
   },
   deletePostBtn: {
     padding: 8,
   },
   postText: {
     fontSize: 16,
-    color: '#444',
     lineHeight: 24,
     marginBottom: 12
   },
   postImage: {
     width: '100%',
-    height: 200,
+    height: 220,
     borderRadius: 12,
-    marginBottom: 12
+    marginBottom: 12,
+    backgroundColor: '#000',
   },
-  mediaPlaceholder: {
-    width: '100%',
-    height: 120,
-    borderRadius: 12,
-    backgroundColor: '#f8f9fa',
-    borderWidth: 1,
-    borderColor: '#eee',
-    justifyContent: 'center',
+  fileAttachmentBox: {
+    flexDirection: 'row',
     alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
     marginBottom: 12,
   },
-  mediaPlaceholderText: {
-    marginTop: 8,
-    color: '#888',
+  fileAttachmentName: {
     fontSize: 14,
-    fontWeight: '500',
-  },
-  attachmentName: {
-    marginTop: 4,
-    color: '#555',
-    fontSize: 12,
-    maxWidth: '80%',
-    textAlign: 'center',
+    fontWeight: '600',
   },
   postFooter: {
     flexDirection: 'row',
     marginTop: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.03)',
     paddingTop: 12
   },
   actionButton: {
@@ -1336,18 +1296,15 @@ const styles = StyleSheet.create({
   },
   actionText: {
     marginLeft: 6,
-    color: '#555',
     fontSize: 14,
     fontWeight: '600'
   },
   commentSection: {
     marginTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#f1f1f1',
     paddingTop: 12,
   },
   commentItem: {
-    backgroundColor: '#f8f9fa',
     padding: 10,
     borderRadius: 12,
     marginBottom: 8,
@@ -1355,12 +1312,10 @@ const styles = StyleSheet.create({
   commentAuthor: {
     fontWeight: 'bold',
     fontSize: 13,
-    color: '#1a1a1a',
     marginBottom: 2,
   },
   commentText: {
     fontSize: 14,
-    color: '#444',
   },
   commentInputContainer: {
     flexDirection: 'row',
@@ -1369,7 +1324,6 @@ const styles = StyleSheet.create({
   },
   commentInput: {
     flex: 1,
-    backgroundColor: '#f1f3f5',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingTop: 10,
@@ -1377,7 +1331,6 @@ const styles = StyleSheet.create({
     minHeight: 40,
     maxHeight: 100,
     fontSize: 14,
-    color: '#333',
   },
   sendCommentBtn: {
     backgroundColor: '#ff6b81',
@@ -1401,7 +1354,6 @@ const styles = StyleSheet.create({
   miniFab: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 25,

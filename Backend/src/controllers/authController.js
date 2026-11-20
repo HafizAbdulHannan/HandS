@@ -1,7 +1,18 @@
 const User = require('../models/User');
 const Post = require('../models/Post');
+const Message = require('../models/Message');
+const Notification = require('../models/Notification');
+const PairingRequest = require('../models/PairingRequest');
+const DateEvent = require('../models/DateEvent');
+const MoodLog = require('../models/MoodLog');
+const Question = require('../models/Question');
+const QuestionAnswer = require('../models/QuestionAnswer');
+const SharedListItem = require('../models/SharedListItem');
+const SharedPet = require('../models/SharedPet');
+const WatchRoom = require('../models/WatchRoom');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const sendEmail = require('../utils/sendEmail');
 const archiver = require('archiver');
 const path = require('path');
@@ -25,19 +36,27 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'Please provide all required fields' });
     }
 
-    const userExists = await User.findOne({ email });
-    if (userExists) {
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const trimmedUsername = String(username).trim();
+
+    const emailExists = await User.findOne({ email: normalizedEmail });
+    if (emailExists) {
       return res.status(400).json({ message: 'User with this email already exists' });
     }
 
+    const usernameExists = await User.findOne({ username: trimmedUsername });
+    if (usernameExists) {
+      return res.status(400).json({ message: 'Username is already taken' });
+    }
+
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const hashedPassword = await bcrypt.hash(String(password), salt);
 
     const user = await User.create({
-      fullName,
-      username,
-      phoneNumber,
-      email,
+      fullName: String(fullName).trim(),
+      username: trimmedUsername,
+      phoneNumber: String(phoneNumber).trim(),
+      email: normalizedEmail,
       password: hashedPassword,
     });
 
@@ -58,6 +77,9 @@ const registerUser = async (req, res) => {
     }
   } catch (error) {
     console.error(error);
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Email or username already exists' });
+    }
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -69,9 +91,13 @@ const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Please provide email and password' });
+    }
 
-    if (user && (await bcrypt.compare(password, user.password))) {
+    const user = await User.findOne({ email: String(email).trim().toLowerCase() });
+
+    if (user && (await bcrypt.compare(String(password), user.password))) {
       res.json({
         _id: user.id,
         fullName: user.fullName,
@@ -81,6 +107,7 @@ const loginUser = async (req, res) => {
         avatar: user.avatar,
         bio: user.bio,
         partner: user.partner,
+        pendingAnimation: user.pendingAnimation,
         token: generateToken(user._id),
       });
     } else {
@@ -129,13 +156,14 @@ const updateProfile = async (req, res) => {
     const { fullName, username, bio, avatar } = req.body;
     const user = req.user;
     
-    if (fullName) user.fullName = fullName;
+    if (fullName) user.fullName = String(fullName).trim();
     if (username) {
-      const existingUser = await User.findOne({ username });
+      const trimmedUsername = String(username).trim();
+      const existingUser = await User.findOne({ username: trimmedUsername });
       if (existingUser && existingUser._id.toString() !== user._id.toString()) {
         return res.status(400).json({ message: 'Username already taken' });
       }
-      user.username = username;
+      user.username = trimmedUsername;
     }
     if (bio !== undefined) user.bio = bio;
     if (avatar !== undefined) user.avatar = avatar;
@@ -143,9 +171,7 @@ const updateProfile = async (req, res) => {
     await user.save();
     res.status(200).json(user);
   } catch (error) {
-    console.error('updateProfile error name:', error.name);
-    console.error('updateProfile error message:', error.message);
-    console.error('updateProfile error code:', error.code);
+    console.error('updateProfile error:', error.message);
     res.status(500).json({ message: error.message || 'Server error' });
   }
 };
@@ -158,14 +184,11 @@ const updateLocation = async (req, res) => {
     const { latitude, longitude } = req.body;
     if (latitude !== undefined && longitude !== undefined) {
       req.user.location = {
-        lat: latitude,
-        lng: longitude,
+        lat: Number(latitude),
+        lng: Number(longitude),
         updatedAt: new Date()
       };
       await req.user.save();
-      // Optionally, we can notify partner via socket.io, but the socket is handled in server.js.
-      // Since this is for background updates, we will just save to DB.
-      // Partner map screen will need to periodically fetch or we can integrate socket here if needed.
     }
     res.status(200).json({ message: 'Location updated successfully' });
   } catch (error) {
@@ -180,32 +203,36 @@ const updateLocation = async (req, res) => {
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    const user = await User.findOne({ email });
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    const user = await User.findOne({ email: String(email).trim().toLowerCase() });
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otp = crypto.randomInt(100000, 1000000).toString();
 
     const salt = await bcrypt.genSalt(10);
     const hashedOTP = await bcrypt.hash(otp, salt);
 
     user.resetPasswordOTP = hashedOTP;
-    user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
+    user.resetPasswordExpire = Date.now() + 15 * 60 * 1000; // 15 minutes
     await user.save();
 
-    const message = `Dear ${user.fullName},\nhere is you one time pass for HandS app.\n${otp}\nPlease do not share it to anyone. If you don't requested it ignore it and immideately change your password.`;
+    const message = `Dear ${user.fullName},\nhere is your one-time passcode for HandS app:\n${otp}\nPlease do not share it with anyone. If you didn't request this, ignore it and immediately change your password.`;
 
     try {
       await sendEmail({
         email: user.email,
         subject: 'Forget Password - OTP',
         message,
-        otp, // Explicitly pass the OTP code for EmailJS templates
+        otp,
       });
 
-      res.status(200).json({ message: 'OTP sent to email', mockOtp: otp });
+      res.status(200).json({ message: 'OTP sent to email' });
     } catch (error) {
       user.resetPasswordOTP = undefined;
       user.resetPasswordExpire = undefined;
@@ -226,8 +253,12 @@ const forgotPassword = async (req, res) => {
 const verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ message: 'Email and OTP are required' });
+    }
+
     const user = await User.findOne({ 
-      email,
+      email: String(email).trim().toLowerCase(),
       resetPasswordExpire: { $gt: Date.now() }
     });
 
@@ -235,7 +266,7 @@ const verifyOTP = async (req, res) => {
       return res.status(400).json({ message: 'Invalid or expired OTP' });
     }
 
-    const isMatch = await bcrypt.compare(otp, user.resetPasswordOTP);
+    const isMatch = await bcrypt.compare(String(otp), user.resetPasswordOTP);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid or expired OTP' });
     }
@@ -253,8 +284,12 @@ const verifyOTP = async (req, res) => {
 const resetPassword = async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ message: 'Email, OTP, and new password are required' });
+    }
+
     const user = await User.findOne({ 
-      email,
+      email: String(email).trim().toLowerCase(),
       resetPasswordExpire: { $gt: Date.now() }
     });
 
@@ -262,13 +297,13 @@ const resetPassword = async (req, res) => {
       return res.status(400).json({ message: 'Invalid or expired OTP' });
     }
 
-    const isMatch = await bcrypt.compare(otp, user.resetPasswordOTP);
+    const isMatch = await bcrypt.compare(String(otp), user.resetPasswordOTP);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid or expired OTP' });
     }
 
     const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
+    user.password = await bcrypt.hash(String(newPassword), salt);
     user.resetPasswordOTP = undefined;
     user.resetPasswordExpire = undefined;
     
@@ -288,16 +323,21 @@ const downloadData = async (req, res) => {
   try {
     const user = req.user;
     const posts = await Post.find({ author: user._id });
+    const uploadsBaseDir = path.resolve(__dirname, '../../uploads');
 
-    // Set response headers for zip file download
     res.attachment('HandS_UserData.zip');
     
     const archive = archiver('zip', {
-      zlib: { level: 9 } // Sets the compression level.
+      zlib: { level: 9 }
     });
 
     archive.on('error', function(err) {
-      throw err;
+      console.error('Archiver error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Error creating archive' });
+      } else {
+        res.end();
+      }
     });
 
     archive.pipe(res);
@@ -305,17 +345,14 @@ const downloadData = async (req, res) => {
     let postsTextContent = `Data Export for ${user.username} (${user.email})\n\n--- Posts ---\n\n`;
 
     posts.forEach((post, index) => {
-      // Append text content
       if (post.content) {
         postsTextContent += `Post ${index + 1} (${new Date(post.createdAt).toLocaleString()}):\n${post.content}\n\n`;
       }
 
-      // Handle media files
       if (post.mediaUrl && post.mediaType !== 'none') {
         const isGallery = !post.content && post.mediaType === 'image';
         const folderName = isGallery ? 'Gallery' : 'Images';
         
-        // Check if mediaUrl is a base64 string or a local file path
         if (post.mediaUrl.startsWith('data:')) {
           const matches = post.mediaUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
           if (matches && matches.length === 3) {
@@ -324,10 +361,11 @@ const downloadData = async (req, res) => {
             archive.append(buffer, { name: `${folderName}/post_${index}_media.${ext}` });
           }
         } else {
-          // Local file path
-          const filePath = path.join(__dirname, '..', '..', post.mediaUrl);
-          if (fs.existsSync(filePath)) {
-            archive.file(filePath, { name: `${folderName}/${path.basename(post.mediaUrl)}` });
+          // Safely resolve inside uploads directory to prevent path traversal
+          const safeFilename = path.basename(post.mediaUrl);
+          const filePath = path.resolve(uploadsBaseDir, safeFilename);
+          if (filePath.startsWith(uploadsBaseDir) && fs.existsSync(filePath)) {
+            archive.file(filePath, { name: `${folderName}/${safeFilename}` });
           }
         }
       }
@@ -338,8 +376,6 @@ const downloadData = async (req, res) => {
     await archive.finalize();
   } catch (error) {
     console.error('Download Data Error:', error);
-    // Note: If headers are already sent due to pipe, we can't send JSON anymore.
-    // However, if it errors before that, we can.
     if (!res.headersSent) {
       res.status(500).json({ message: 'Server error generating zip' });
     }
@@ -351,36 +387,44 @@ const downloadData = async (req, res) => {
 // @access  Private
 const deleteAccount = async (req, res) => {
   try {
-    const { password, reason } = req.body;
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required' });
+    }
+
     const user = req.user;
-
-    // Fetch user with password since req.user excludes it
     const userWithPassword = await User.findById(user._id);
+    if (!userWithPassword) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
-    // Validate password
-    const isMatch = await bcrypt.compare(password, userWithPassword.password);
+    const isMatch = await bcrypt.compare(String(password), userWithPassword.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Incorrect password' });
     }
 
     // Unpair if partnered
     if (user.partner) {
-      const partnerUser = await User.findById(user.partner);
-      if (partnerUser) {
-        partnerUser.partner = null;
-        await partnerUser.save();
-      }
+      const partnerId = user.partner;
+      const pairKey = [user._id.toString(), partnerId.toString()].sort().join('_');
+      await User.findByIdAndUpdate(partnerId, { partner: null });
+      await SharedListItem.deleteMany({ pair: pairKey });
+      await SharedPet.deleteMany({ pair: pairKey });
     }
 
-    // Delete all posts by this user
-    await Post.deleteMany({ author: user._id });
-
-    // Note: If using local uploads, ideally we'd also delete the actual files from disk.
-    // For simplicity and since we don't have the full list of files to unlink easily here
-    // without scanning all posts first, we'll just delete from DB.
-
-    // Delete the user
-    await User.findByIdAndDelete(user._id);
+    // Delete all data associated with this user
+    await Promise.all([
+      Post.deleteMany({ author: user._id }),
+      Message.deleteMany({ $or: [{ sender: user._id }, { receiver: user._id }] }),
+      Notification.deleteMany({ $or: [{ recipient: user._id }, { sender: user._id }] }),
+      PairingRequest.deleteMany({ $or: [{ sender: user._id }, { receiver: user._id }] }),
+      DateEvent.deleteMany({ user: user._id }),
+      MoodLog.deleteMany({ user: user._id }),
+      Question.deleteMany({ user: user._id }),
+      QuestionAnswer.deleteMany({ user: user._id }),
+      WatchRoom.deleteMany({ host: user._id }),
+      User.findByIdAndDelete(user._id),
+    ]);
 
     res.status(200).json({ message: 'Account deleted successfully' });
   } catch (error) {

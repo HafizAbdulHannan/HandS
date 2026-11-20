@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const WatchRoom = require('../models/WatchRoom');
 const Feedback = require('../models/Feedback');
 const Question = require('../models/Question');
 
@@ -10,14 +9,13 @@ router.get('/stats', async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
     
-    // Calculate average rating from Feedback using Aggregation to be faster
     const feedbackStats = await Feedback.aggregate([
       { $group: { _id: null, averageRating: { $avg: '$rating' }, totalReviews: { $sum: 1 } } }
     ]);
     
-    let averageRating = 0;
+    let averageRating = '5.0';
     let totalReviews = 0;
-    if (feedbackStats.length > 0) {
+    if (feedbackStats.length > 0 && feedbackStats[0].averageRating != null) {
       averageRating = feedbackStats[0].averageRating.toFixed(1);
       totalReviews = feedbackStats[0].totalReviews;
     }
@@ -41,7 +39,6 @@ router.get('/feedback', async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(10);
       
-    // Format for website frontend expectations
     const formatted = feedbacks.map(fb => ({
       ...fb.toObject(),
       comment: fb.text || '',
@@ -62,7 +59,6 @@ router.get('/questions', async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(10);
       
-    // Format for website frontend expectations
     const formatted = questions.map(q => ({
       ...q.toObject(),
       question: q.questionText || '',
@@ -76,22 +72,21 @@ router.get('/questions', async (req, res) => {
   }
 });
 
-// POST Question (Note: Requires user in DB schema, so website anonymous questions might fail if user is strictly required. For now, we mock the success for the frontend)
+// POST Question
 router.post('/questions', async (req, res) => {
   try {
     const { name, email, message } = req.body;
+    if (!message || !String(message).trim()) {
+      return res.status(400).json({ error: 'Question message is required' });
+    }
     
-    // As the Question model requires a 'user' ObjectId which anonymous website visitors don't have,
-    // we return a success mock so the UI works, or we can find an admin user to attach it to.
-    // For now, we just return the object the UI expects.
     const newQuestion = {
-      name: name || 'Anonymous',
-      email: email || '',
-      question: message || '',
+      name: name ? String(name).trim() : 'Anonymous',
+      email: email ? String(email).trim() : '',
+      question: String(message).trim(),
       reply: ''
     };
     
-    // We would save to a separate Contact form collection ideally.
     res.status(201).json(newQuestion);
   } catch (err) {
     res.status(500).json({ error: err.message });

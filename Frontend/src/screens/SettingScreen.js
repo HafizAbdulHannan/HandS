@@ -5,19 +5,15 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
-import axiosInstance, { getMediaUrl, STATIC_URL } from '../api/axiosConfig';
+import axiosInstance, { getMediaUrl } from '../api/axiosConfig';
 import Toast from 'react-native-toast-message';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import * as IntentLauncher from 'expo-intent-launcher';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function SettingScreen() {
   const navigation = useNavigation();
   const { user, logout, loadUser } = useAuth();
   const { isDarkMode, toggleTheme, theme } = useThemeContext();
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [isDownloading, setIsDownloading] = useState(false);
   const [partner, setPartner] = useState(null);
 
   // Delete account modal state
@@ -32,7 +28,6 @@ export default function SettingScreen() {
   const [isDownloadingData, setIsDownloadingData] = useState(false);
 
   const UPDATE_DRIVE_ID = "1LhJ2M_SU0DmY7cAyXg8ZhywHRlgxQkt7";
-  const DRIVE_DOWNLOAD_URL = `https://drive.google.com/uc?export=download&id=${UPDATE_DRIVE_ID}`;
 
   useEffect(() => {
     const fetchPartner = async () => {
@@ -84,8 +79,6 @@ export default function SettingScreen() {
 
   const handleDownloadUpdate = async () => {
     try {
-      // Direct downloading via FileSystem often fails with Google Drive because of virus scan warning pages.
-      // Opening the URL in the browser allows the user to download it reliably.
       Toast.show({ type: 'info', text1: 'Redirecting', text2: 'Opening browser to download update...' });
       await Linking.openURL(`https://drive.google.com/file/d/${UPDATE_DRIVE_ID}/view?usp=sharing`);
     } catch (error) {
@@ -102,12 +95,14 @@ export default function SettingScreen() {
       });
       
       const fileUri = FileSystem.documentDirectory + 'HandS_UserData.zip';
-      const base64 = btoa(
-        new Uint8Array(response.data).reduce(
-          (data, byte) => data + String.fromCharCode(byte),
-          '',
-        )
-      );
+      const bytes = new Uint8Array(response.data);
+      let binary = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        const sub = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode.apply(null, sub);
+      }
+      const base64 = btoa(binary);
       
       await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
       
@@ -148,14 +143,70 @@ export default function SettingScreen() {
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Settings</Text>
       </View>
       
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={[styles.menuContainer, { backgroundColor: theme.colors.card }]}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Profile Overview Card */}
+        <View style={[styles.profileCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <TouchableOpacity
+            style={styles.profileCardTop}
+            onPress={() => navigation.navigate('Profile')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.profileAvatarContainer}>
+              {user?.avatar ? (
+                <Image source={{ uri: getMediaUrl(user.avatar) }} style={styles.profileAvatarImage} />
+              ) : (
+                <Text style={styles.profileAvatarInitial}>
+                  {(user?.fullName || user?.username || 'U').charAt(0).toUpperCase()}
+                </Text>
+              )}
+            </View>
+            <View style={styles.profileInfo}>
+              <Text style={[styles.profileName, { color: theme.colors.text }]} numberOfLines={1}>
+                {user?.fullName || user?.username || 'User'}
+              </Text>
+              <Text style={[styles.profileUsername, { color: theme.colors.primary }]} numberOfLines={1}>
+                @{user?.username || 'user'}
+              </Text>
+              {user?.email ? (
+                <Text style={[styles.profileEmail, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                  {user.email}
+                </Text>
+              ) : null}
+              {user?.bio ? (
+                <Text style={[styles.profileBio, { color: theme.colors.textSecondary }]} numberOfLines={2}>
+                  {user.bio}
+                </Text>
+              ) : null}
+            </View>
+            <Ionicons name="chevron-forward" size={22} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+
+          <View style={[styles.profileActionsRow, { borderTopColor: theme.colors.border }]}>
+            <TouchableOpacity
+              style={[styles.profileActionBtn, { backgroundColor: theme.colors.inputBackground }]}
+              onPress={() => navigation.navigate('Profile')}
+            >
+              <Ionicons name="person-outline" size={16} color={theme.colors.text} />
+              <Text style={[styles.profileActionText, { color: theme.colors.text }]}>View Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.profileActionBtn, { backgroundColor: theme.colors.primary }]}
+              onPress={() => navigation.navigate('EditProfile')}
+            >
+              <Ionicons name="create-outline" size={16} color="#fff" />
+              <Text style={[styles.profileActionText, { color: '#fff' }]}>Edit Profile</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={[styles.menuContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <TouchableOpacity 
             style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
             onPress={() => navigation.navigate('Feedback')}
           >
             <Ionicons name="chatbubble-ellipses-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
             <Text style={[styles.menuText, { color: theme.colors.text }]}>Provide Feedback</Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -164,24 +215,25 @@ export default function SettingScreen() {
           >
             <Ionicons name="help-circle-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
             <Text style={[styles.menuText, { color: theme.colors.text }]}>Ask a Question</Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
             onPress={toggleTheme}
           >
-            <Ionicons name={isDarkMode ? "sunny-outline" : "moon-outline"} size={22} color={theme.colors.icon} style={styles.menuIcon} />
-            <Text style={[styles.menuText, { color: theme.colors.text }]}>{isDarkMode ? "Light Mode" : "Dark Mode"}</Text>
+            <Ionicons name={isDarkMode ? "sunny-outline" : "moon-outline"} size={22} color={theme.colors.primary} style={styles.menuIcon} />
+            <Text style={[styles.menuText, { color: theme.colors.text }]}>{isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}</Text>
+            <Ionicons name="swap-horizontal-outline" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
-            onPress={() => {
-              navigation.navigate('Location');
-            }}
+            onPress={() => navigation.navigate('Location')}
           >
             <Ionicons name="location-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
             <Text style={[styles.menuText, { color: theme.colors.text }]}>Location Sharing</Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -189,7 +241,8 @@ export default function SettingScreen() {
             onPress={handleCameraAccess}
           >
             <Ionicons name="camera-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
-            <Text style={[styles.menuText, { color: theme.colors.text }]}>Camera Access</Text>
+            <Text style={[styles.menuText, { color: theme.colors.text }]}>Camera & Mic Permissions</Text>
+            <Ionicons name="open-outline" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -198,6 +251,7 @@ export default function SettingScreen() {
           >
             <Ionicons name="document-text-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
             <Text style={[styles.menuText, { color: theme.colors.text }]}>Our Policy</Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -206,28 +260,21 @@ export default function SettingScreen() {
           >
             <Ionicons name="information-circle-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
             <Text style={[styles.menuText, { color: theme.colors.text }]}>About Us</Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
             onPress={handleDownloadUpdate}
-            disabled={isDownloading}
           >
             <Ionicons name="cloud-download-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.menuText, { color: theme.colors.text }]}>Download Update</Text>
-              {isDownloading && (
-                <View style={styles.progressContainer}>
-                  <View style={[styles.progressBar, { width: `${downloadProgress * 100}%` }]} />
-                </View>
-              )}
-            </View>
-            {isDownloading && <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{Math.round(downloadProgress * 100)}%</Text>}
+            <Text style={[styles.menuText, { color: theme.colors.text }]}>Download App Update</Text>
+            <Ionicons name="open-outline" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
           {user?.partner && (
             <TouchableOpacity 
-              style={[styles.menuItem, { borderBottomColor: theme.colors.border, borderColor: 'rgba(255, 71, 87, 0.3)', borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, marginTop: 10, marginBottom: 10 }]} 
+              style={[styles.menuItem, { borderBottomColor: theme.colors.border, borderColor: 'rgba(255, 71, 87, 0.35)', borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, marginTop: 12, marginBottom: 12 }]} 
               onPress={handleUnpair}
             >
               <View style={styles.partnerAvatarContainer}>
@@ -237,7 +284,9 @@ export default function SettingScreen() {
                   <Text style={styles.partnerAvatarInitial}>{partner?.username?.charAt(0).toUpperCase() || 'P'}</Text>
                 )}
               </View>
-              <Text style={[styles.menuText, { color: '#ff4757', flex: 1 }]}>Disconnect Partner</Text>
+              <Text style={[styles.menuText, { color: '#ff4757' }]}>
+                Disconnect Partner {partner?.username ? `(@${partner.username})` : ''}
+              </Text>
             </TouchableOpacity>
           )}
 
@@ -432,16 +481,93 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '800',
   },
   content: {
     padding: 20,
     paddingBottom: 40,
   },
+  profileCard: {
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  profileCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  profileAvatarContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#ff6b81',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+    overflow: 'hidden',
+  },
+  profileAvatarImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  profileAvatarInitial: {
+    color: '#fff',
+    fontSize: 26,
+    fontWeight: 'bold',
+  },
+  profileInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  profileName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  profileUsername: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  profileEmail: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  profileBio: {
+    fontSize: 13,
+    marginTop: 4,
+  },
+  profileActionsRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    marginTop: 14,
+    paddingTop: 12,
+    gap: 10,
+  },
+  profileActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: 10,
+    gap: 6,
+  },
+  profileActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
   menuContainer: {
-    borderRadius: 15,
+    borderRadius: 18,
     paddingHorizontal: 15,
+    borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -458,20 +584,9 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   menuText: {
+    flex: 1,
     fontSize: 16,
     fontWeight: '500',
-  },
-  progressContainer: {
-    height: 4,
-    backgroundColor: '#eee',
-    borderRadius: 2,
-    marginTop: 8,
-    width: '90%',
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: '#ff6b81',
   },
   partnerAvatarContainer: {
     width: 36,

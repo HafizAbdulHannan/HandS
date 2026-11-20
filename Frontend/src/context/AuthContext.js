@@ -3,6 +3,8 @@ import { Platform, DeviceEventEmitter } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import axiosInstance from '../api/axiosConfig';
 
@@ -17,7 +19,6 @@ Notifications.setNotificationHandler({
 async function registerForPushNotificationsAsync() {
   let token;
   
-  // Expo Go completely removed Push Notifications in SDK 53+
   if (Constants.appOwnership === 'expo') {
     console.log('Push notifications are not supported in Expo Go. Use a development build.');
     return null;
@@ -43,7 +44,7 @@ async function registerForPushNotificationsAsync() {
       return null;
     }
     try {
-      const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId ?? "dummy-project-id";
+      const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId ?? 'b2ae7d16-a9fe-4e80-90ce-6b48cddd5049';
       token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     } catch (e) {
       console.log('Error getting token', e);
@@ -71,7 +72,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Check token on initial load
   const loadUser = async () => {
     try {
       const token = await SecureStore.getItemAsync('userToken');
@@ -125,6 +125,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
+    try {
+      await AsyncStorage.removeItem('isSharingLive');
+      const hasTask = await Location.hasStartedLocationUpdatesAsync('background-location-task');
+      if (hasTask) {
+        await Location.stopLocationUpdatesAsync('background-location-task');
+      }
+    } catch (e) {}
     await SecureStore.deleteItemAsync('userToken');
     setUser(null);
   };

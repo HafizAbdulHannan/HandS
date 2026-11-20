@@ -2,7 +2,7 @@ const Feedback = require('../models/Feedback');
 
 exports.getFeedbacks = async (req, res) => {
   try {
-    const feedbacks = await Feedback.find().populate('user', 'username avatar').sort({ createdAt: -1 });
+    const feedbacks = await Feedback.find().populate('user', 'fullName username avatar').sort({ createdAt: -1 });
     res.status(200).json(feedbacks);
   } catch (error) {
     console.error(error);
@@ -13,18 +13,25 @@ exports.getFeedbacks = async (req, res) => {
 exports.submitFeedback = async (req, res) => {
   try {
     const { rating, text } = req.body;
+    const numericRating = Number(rating);
+
+    if (!numericRating || numericRating < 1 || numericRating > 5) {
+      return res.status(400).json({ message: 'Please provide a valid rating between 1 and 5' });
+    }
+
     let imageUrl = '';
-    
     if (req.file) {
       imageUrl = `/uploads/${req.file.filename}`;
     }
 
     const feedback = await Feedback.create({
       user: req.user._id,
-      rating,
-      text,
+      rating: numericRating,
+      text: text ? String(text).trim() : '',
       imageUrl
     });
+
+    await feedback.populate('user', 'fullName username avatar');
 
     res.status(201).json(feedback);
   } catch (error) {

@@ -5,22 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
-import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
+import axiosInstance, { getMediaUrl } from '../api/axiosConfig';
 import * as DocumentPicker from 'expo-document-picker';
 import { Audio } from 'expo-av';
-import * as SecureStore from 'expo-secure-store';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Toast from 'react-native-toast-message';
 import * as Notifications from 'expo-notifications';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
 export default function DatesToRememberScreen() {
   const { theme } = useThemeContext();
   const { user } = useAuth();
@@ -39,7 +31,7 @@ export default function DatesToRememberScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Audio playback state
-  const [sound, setSound] = useState();
+  const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingId, setPlayingId] = useState(null);
 
@@ -47,9 +39,9 @@ export default function DatesToRememberScreen() {
     fetchDates();
     
     const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-      const { customSoundUrl, dateId } = response.notification.request.content.data;
+      const { customSoundUrl, dateId } = response.notification?.request?.content?.data || {};
       if (customSoundUrl) {
-         playSound(customSoundUrl, dateId);
+        playSound(customSoundUrl, dateId);
       }
       
       if (dateId) {
@@ -77,15 +69,18 @@ export default function DatesToRememberScreen() {
     });
 
     return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
       if (responseListener) {
         try {
           responseListener.remove();
-        } catch (e) {
-          Notifications.removeNotificationSubscription(responseListener);
-        }
+        } catch (e) {}
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync().catch(() => {});
       }
     };
   }, [sound]);
@@ -105,7 +100,7 @@ export default function DatesToRememberScreen() {
   const handlePickAudio = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: 'audio/*', // Allow audio files
+        type: 'audio/*',
         copyToCacheDirectory: true,
       });
 
@@ -113,7 +108,7 @@ export default function DatesToRememberScreen() {
         const asset = result.assets[0];
         setSelectedAudio({
           uri: asset.uri,
-          name: asset.name,
+          name: asset.name || 'reminder.mp3',
           type: asset.mimeType || 'audio/mpeg',
         });
       }
@@ -134,10 +129,10 @@ export default function DatesToRememberScreen() {
 
       if (selectedAudio) {
         let fileUri = selectedAudio.uri;
+        const ext = (selectedAudio.name || 'mp3').split('.').pop() || 'mp3';
         
-        // Android DocumentPicker returns content:// URIs. Copy to local file:// to ensure FormData handles it correctly.
         if (Platform.OS === 'android' && fileUri.startsWith('content://')) {
-          const tempUri = FileSystem.cacheDirectory + 'temp_audio_' + Date.now() + '.mp3';
+          const tempUri = `${FileSystem.cacheDirectory}temp_audio_${Date.now()}.${ext}`;
           await FileSystem.copyAsync({ from: fileUri, to: tempUri });
           fileUri = tempUri;
         } else if (Platform.OS === 'ios') {
@@ -145,22 +140,18 @@ export default function DatesToRememberScreen() {
         }
 
         const formData = new FormData();
-        formData.append('audio', {
+        formData.append('media', {
           uri: fileUri,
-          name: 'audio.m4a',
-          type: 'audio/m4a'
+          name: selectedAudio.name || `reminder.${ext}`,
+          type: selectedAudio.type || 'audio/mpeg'
         });
 
-        const uploadRes = await axiosInstance.post('/upload', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        });
+        const uploadRes = await axiosInstance.post('/upload', formData);
         audioUrl = uploadRes.data.url;
       }
 
       const response = await axiosInstance.post('/dates', {
-        title,
+        title: title.trim(),
         date,
         customSoundUrl: audioUrl
       });
@@ -168,14 +159,20 @@ export default function DatesToRememberScreen() {
       const savedDate = response.data;
       
       try {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "Date Reminder! ❤️",
-            body: `It's time for: ${title}`,
-            data: { customSoundUrl: audioUrl, dateId: savedDate._id || savedDate.id },
-          },
-          trigger: new Date(date),
-        });
+        const targetDate = new Date(date);
+        if (targetDate.getTime() > Date.now()) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "Date Reminder! ❤️",
+              body: `It's time for: ${title.trim()}`,
+              data: { customSoundUrl: audioUrl, dateId: savedDate._id || savedDate.id },
+            },
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes?.DATE || 'date',
+              date: targetDate,
+            },
+          });
+        }
       } catch (e) {
         console.log('Notification schedule failed', e);
       }
@@ -186,7 +183,6 @@ export default function DatesToRememberScreen() {
       fetchDates();
     } catch (error) {
       console.log('Error saving date:', error);
-      Alert.alert('Upload Error', JSON.stringify(error.response?.data || error.message));
       Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to save date' });
     } finally {
       setIsSubmitting(false);
@@ -223,7 +219,6 @@ export default function DatesToRememberScreen() {
     if (!audioUrl) return;
 
     if (isPlaying && playingId === id) {
-      // Stop playing
       await sound?.pauseAsync();
       setIsPlaying(false);
       setPlayingId(null);
@@ -236,7 +231,7 @@ export default function DatesToRememberScreen() {
       }
 
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: `${STATIC_URL}${audioUrl}` },
+        { uri: getMediaUrl(audioUrl) },
         { shouldPlay: true }
       );
       
@@ -330,7 +325,7 @@ export default function DatesToRememberScreen() {
         />
       )}
 
-      <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setModalVisible(false); resetForm(); }}>
         <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={[styles.modalHeader, { borderBottomColor: theme.colors.border }]}>
             <TouchableOpacity onPress={() => { setModalVisible(false); resetForm(); }}>
@@ -426,7 +421,7 @@ export default function DatesToRememberScreen() {
               </Text>
             </TouchableOpacity>
             <Text style={[styles.helpText, { color: theme.colors.textSecondary }]}>
-              This sound will play when you open the app on this date. (Only .mp3 format supported)
+              This custom sound can be played on your special date (.mp3, .m4a, .wav supported).
             </Text>
           </View>
         </KeyboardAvoidingView>

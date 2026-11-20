@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useThemeContext } from '../context/ThemeContext';
-import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
+import axiosInstance, { getMediaUrl } from '../api/axiosConfig';
 import Toast from 'react-native-toast-message';
 import Animated, { FadeInUp, SlideInDown } from 'react-native-reanimated';
 
@@ -70,7 +70,7 @@ export default function DrawFunReplyScreen() {
     );
   }
 
-  const imageUrl = `${STATIC_URL}${post.mediaUrl}`;
+  const imageUrl = getMediaUrl(post.mediaUrl);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     width: '100%',
     padding: 20,
     paddingBottom: 40,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     alignItems: 'center'

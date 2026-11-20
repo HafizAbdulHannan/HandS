@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, FlatList, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import axiosInstance from '../api/axiosConfig';
+import { Ionicons } from '@expo/vector-icons';
+import axiosInstance, { getMediaUrl } from '../api/axiosConfig';
+import { useThemeContext } from '../context/ThemeContext';
 import Toast from 'react-native-toast-message';
 
 export default function PairingScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [loadingUserId, setLoadingUserId] = useState(null);
   const [sentRequests, setSentRequests] = useState([]);
   const navigation = useNavigation();
+  const { theme } = useThemeContext();
 
   const handleSearch = async () => {
     if (searchQuery.trim() === '') {
@@ -18,12 +22,15 @@ export default function PairingScreen() {
       return;
     }
     
+    setIsSearching(true);
     try {
-      const response = await axiosInstance.get(`/pairing/search?q=${searchQuery}`);
+      const response = await axiosInstance.get(`/pairing/search?q=${encodeURIComponent(searchQuery.trim())}`);
       setSearchResults(response.data);
     } catch (error) {
       console.log('Search error:', error);
       setSearchResults([]);
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -41,31 +48,40 @@ export default function PairingScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
       <KeyboardAvoidingView 
         style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Our Space</Text>
-          <Text style={styles.subtitle}>Link with your partner</Text>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={26} color={theme.colors.text} />
+          </TouchableOpacity>
+          <View>
+            <Text style={[styles.title, { color: theme.colors.text }]}>Connect Partner</Text>
+            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Search by username or email to link your accounts</Text>
+          </View>
         </View>
 
         <View style={styles.searchContainer}>
-          <View style={styles.inputWrapper}>
-            <Text style={styles.searchIcon}>🔍</Text>
+          <View style={[styles.inputWrapper, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]}>
+            <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={{ marginRight: 8 }} />
             <TextInput 
-              style={styles.input}
+              style={[styles.input, { color: theme.colors.text }]}
               placeholder="Search partner..."
-              placeholderTextColor="#aaa"
+              placeholderTextColor={theme.colors.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoCapitalize="none"
               onSubmitEditing={handleSearch}
             />
           </View>
-          <TouchableOpacity style={styles.searchButton} activeOpacity={0.8} onPress={handleSearch}>
-            <Text style={styles.searchButtonText}>Search</Text>
+          <TouchableOpacity style={styles.searchButton} activeOpacity={0.8} onPress={handleSearch} disabled={isSearching}>
+            {isSearching ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.searchButtonText}>Search</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -74,40 +90,49 @@ export default function PairingScreen() {
           keyExtractor={(item) => item._id}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
-            searchQuery.trim() !== '' ? (
+            searchQuery.trim() !== '' && !isSearching ? (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyIcon}>🙈</Text>
-                <Text style={styles.emptyText}>No results found.</Text>
-                <Text style={styles.emptySubtext}>Make sure the username or email is correct.</Text>
+                <Text style={[styles.emptyText, { color: theme.colors.text }]}>No results found.</Text>
+                <Text style={[styles.emptySubtext, { color: theme.colors.textSecondary }]}>Make sure the username or email is correct.</Text>
               </View>
             ) : null
           }
           renderItem={({ item }) => (
-            <View style={styles.userCard}>
+            <View style={[styles.userCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
               <View style={styles.userInfo}>
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarText}>{item.username.charAt(0).toUpperCase()}</Text>
+                <View style={[styles.avatarPlaceholder, { overflow: 'hidden' }]}>
+                  {item.avatar ? (
+                    <Image source={{ uri: getMediaUrl(item.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+                  ) : (
+                    <Text style={styles.avatarText}>{(item.username || 'U').charAt(0).toUpperCase()}</Text>
+                  )}
                 </View>
                 <View style={styles.textContainer}>
-                  <Text style={styles.username} numberOfLines={1}>{item.username}</Text>
-                  <Text style={styles.email} numberOfLines={1}>{item.email}</Text>
+                  <Text style={[styles.username, { color: theme.colors.text }]} numberOfLines={1}>
+                    {item.fullName || item.username}
+                  </Text>
+                  <Text style={[styles.email, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                    @{item.username} • {item.email}
+                  </Text>
                 </View>
               </View>
               <TouchableOpacity 
                 style={[
                   styles.connectButton, 
-                  sentRequests.includes(item._id) && styles.connectButtonDisabled
+                  (sentRequests.includes(item._id) || item.partner) && styles.connectButtonDisabled
                 ]}
                 activeOpacity={0.8}
                 onPress={() => handleSendRequest(item._id)}
-                disabled={sentRequests.includes(item._id) || loadingUserId === item._id}
+                disabled={sentRequests.includes(item._id) || !!item.partner || loadingUserId === item._id}
               >
                 {loadingUserId === item._id ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <Text style={styles.connectButtonText}>
-                    {sentRequests.includes(item._id) ? 'Sent' : 'Connect'}
+                    {item.partner ? 'Paired' : sentRequests.includes(item._id) ? 'Sent' : 'Connect'}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -122,25 +147,27 @@ export default function PairingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
   },
   keyboardView: {
     flex: 1,
   },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 40,
+    paddingTop: 16,
     marginBottom: 20,
   },
+  backBtn: {
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+    padding: 4,
+  },
   title: {
-    fontSize: 34,
+    fontSize: 32,
     fontWeight: '800',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#888',
+    fontSize: 15,
     fontWeight: '500',
   },
   searchContainer: {
@@ -153,27 +180,20 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#eee',
     paddingHorizontal: 16,
     marginRight: 12,
   },
-  searchIcon: {
-    fontSize: 18,
-    marginRight: 8,
-  },
   input: {
     flex: 1,
-    paddingVertical: 16,
+    paddingVertical: 14,
     fontSize: 16,
-    color: '#333',
   },
   searchButton: {
     backgroundColor: '#ff6b81',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 15,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
@@ -201,13 +221,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyText: {
-    color: '#1a1a1a',
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 8,
   },
   emptySubtext: {
-    color: '#888',
     fontSize: 15,
     textAlign: 'center',
   },
@@ -215,12 +233,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
     padding: 16,
     borderRadius: 20,
     marginTop: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
@@ -240,10 +256,10 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#fff0f3',
+    backgroundColor: 'rgba(255, 107, 129, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
   avatarText: {
     color: '#ff6b81',
@@ -251,18 +267,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   username: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
-    color: '#1a1a1a',
     marginBottom: 2,
   },
   email: {
-    fontSize: 14,
-    color: '#888',
+    fontSize: 13,
   },
   connectButton: {
-    backgroundColor: '#1a1a1a',
-    paddingHorizontal: 20,
+    backgroundColor: '#ff6b81',
+    paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 20,
     minWidth: 90,

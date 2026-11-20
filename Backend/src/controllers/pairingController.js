@@ -1,5 +1,7 @@
 const User = require('../models/User');
 const PairingRequest = require('../models/PairingRequest');
+const Notification = require('../models/Notification');
+const { sendPushNotification } = require('../utils/pushNotification');
 
 // @desc    Search for a partner by username or email
 // @route   GET /api/pairing/search?q=...
@@ -7,16 +9,22 @@ const PairingRequest = require('../models/PairingRequest');
 const searchPartner = async (req, res) => {
   const { q } = req.query;
 
-  if (!q) {
+  if (!q || !String(q).trim()) {
     return res.status(400).json({ message: 'Search query is required' });
   }
 
   try {
-    // Cannot search for yourself
+    // Escape regex special characters to prevent ReDoS and SyntaxError crashes
+    const escapedQuery = String(q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escapedQuery, 'i');
+
+    // Cannot search for yourself, only select public profile fields
     const users = await User.find({
-      $or: [{ username: new RegExp(q, 'i') }, { email: new RegExp(q, 'i') }],
+      $or: [{ username: regex }, { email: regex }, { fullName: regex }],
       _id: { $ne: req.user._id }
-    }).select('-password');
+    })
+      .select('fullName username email avatar bio partner')
+      .limit(25);
 
     res.status(200).json(users);
   } catch (error) {
@@ -32,6 +40,15 @@ const sendPairingRequest = async (req, res) => {
   const { receiverId } = req.body;
 
   try {
+    if (!receiverId) {
+      return res.status(400).json({ message: 'Receiver ID is required' });
+    }
+
+    // Prevent self-pairing
+    if (receiverId.toString() === req.user._id.toString()) {
+      return res.status(400).json({ message: 'You cannot pair with yourself' });
+    }
+
     // 1. Check if user already has a partner
     if (req.user.partner) {
       return res.status(400).json({ message: 'You already have a partner' });
@@ -64,6 +81,14 @@ const sendPairingRequest = async (req, res) => {
       receiver: receiverId
     });
 
+    if (receiver.pushToken) {
+      sendPushNotification(
+        receiver.pushToken,
+        'New Pairing Request 💖',
+        `${req.user.fullName || req.user.username} wants to connect with you!`
+      ).catch((e) => console.error(e));
+    }
+
     res.status(201).json(request);
   } catch (error) {
     console.error(error);
@@ -77,7 +102,7 @@ const sendPairingRequest = async (req, res) => {
 const getPendingRequests = async (req, res) => {
   try {
     const requests = await PairingRequest.find({ receiver: req.user._id, status: 'pending' })
-      .populate('sender', 'username email avatar');
+      .populate('sender', 'fullName username email avatar');
     res.status(200).json(requests);
   } catch (error) {
     console.error(error);
@@ -104,6 +129,18 @@ const acceptPairingRequest = async (req, res) => {
       return res.status(400).json({ message: 'Request is no longer pending' });
     }
 
+    if (req.user.partner) {
+      return res.status(400).json({ message: 'You already have a partner' });
+    }
+
+    const senderUser = await User.findById(request.sender);
+    if (!senderUser) {
+      return res.status(404).json({ message: 'Sender account no longer exists' });
+    }
+    if (senderUser.partner) {
+      return res.status(400).json({ message: 'Sender is already paired with someone else' });
+    }
+
     // Update both users to reference each other
     await User.findByIdAndUpdate(request.sender, { partner: req.user._id });
     await User.findByIdAndUpdate(req.user._id, { partner: request.sender });
@@ -122,6 +159,22 @@ const acceptPairingRequest = async (req, res) => {
       ]
     });
 
+    await Notification.create({
+      recipient: request.sender,
+      sender: req.user._id,
+      title: 'Partner Connected! ❤️',
+      message: `${req.user.fullName || req.user.username} accepted your pairing request!`,
+      type: 'other'
+    });
+
+    if (senderUser.pushToken) {
+      sendPushNotification(
+        senderUser.pushToken,
+        'Partner Connected! ❤️',
+        `${req.user.fullName || req.user.username} accepted your pairing request!`
+      ).catch((e) => console.error(e));
+    }
+
     res.status(200).json({ message: 'Pairing successful' });
   } catch (error) {
     console.error(error);
@@ -137,7 +190,8 @@ const getPartnerDetails = async (req, res) => {
     if (!req.user.partner) {
       return res.status(404).json({ message: 'No partner connected' });
     }
-    const partner = await User.findById(req.user.partner).select('-password');
+    const partner = await User.findById(req.user.partner)
+      .select('fullName username email phoneNumber avatar bio mood partner location createdAt');
     if (!partner) {
       return res.status(404).json({ message: 'Partner not found' });
     }
@@ -167,7 +221,6 @@ const rejectPairingRequest = async (req, res) => {
       return res.status(400).json({ message: 'Request is no longer pending' });
     }
 
-    // Mark request as rejected (or delete it)
     request.status = 'rejected';
     await request.save();
 
@@ -194,7 +247,6 @@ const unpair = async (req, res) => {
     await User.findByIdAndUpdate(user._id, { partner: null });
     await User.findByIdAndUpdate(partnerId, { partner: null });
 
-    // Optional: Delete old pairing requests between them if needed
     await PairingRequest.deleteMany({
       $or: [
         { sender: user._id, receiver: partnerId },

@@ -31,12 +31,12 @@ const io = new Server(server, {
 
 // Security Middleware
 app.use(helmet());
-app.use(helmet.crossOriginResourcePolicy({ policy: "cross-origin" })); // Allow images to load across domains
+app.use(helmet.crossOriginResourcePolicy({ policy: "cross-origin" }));
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Limit each IP to 1000 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
   message: 'Too many requests from this IP, please try again later.'
 });
 app.use('/api', limiter);
@@ -55,6 +55,7 @@ app.use(xss());
 const { sendPushNotification } = require('./utils/pushNotification');
 const User = require('./models/User');
 const Notification = require('./models/Notification');
+const WatchRoom = require('./models/WatchRoom');
 
 const userSocketMap = new Map();
 
@@ -71,7 +72,7 @@ const websiteRoutes = require('./routes/websiteRoutes');
 const moodRoutes = require('./routes/moodRoutes');
 const questionRoutes = require('./routes/questionRoutes');
 const listRoutes = require('./routes/listRoutes');
-const petRoutes = require('./routes/petRoutes'); // NEW
+const petRoutes = require('./routes/petRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
 
 app.use('/api/auth', authRoutes);
@@ -100,35 +101,54 @@ app.get('/', (req, res) => {
 // Error Handling Middleware
 app.use(errorHandler);
 
+const extractId = (val) => {
+  if (!val) return null;
+  if (typeof val === 'object' && val._id) return val._id.toString();
+  return String(val);
+};
+
 // Socket.io for Realtime Features
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
 
+  socket.on('register_user', ({ userId }) => {
+    const uid = extractId(userId);
+    if (uid) {
+      userSocketMap.set(uid, socket.id);
+    }
+  });
+
   // Users can join a room that is a combination of both their IDs (sorted to be consistent)
   socket.on('join_pair_room', ({ userId, partnerId }) => {
-    if (userId && partnerId) {
-      userSocketMap.set(userId, socket.id);
-      const room = [userId, partnerId].sort().join('_');
+    const uid = extractId(userId);
+    const pid = extractId(partnerId);
+    if (uid) {
+      userSocketMap.set(uid, socket.id);
+    }
+    if (uid && pid) {
+      const room = [uid, pid].sort().join('_');
       socket.join(room);
-      console.log(`User ${userId} joined room ${room}`);
+      console.log(`User ${uid} joined room ${room}`);
     }
   });
 
   socket.on('send_miss_you', async ({ room, partnerId, senderId, senderName }) => {
-    socket.to(room).emit('receive_miss_you', { timestamp: new Date() });
-    if (partnerId) {
+    const pid = extractId(partnerId);
+    const sid = extractId(senderId);
+    if (room) {
+      socket.to(room).emit('receive_miss_you', { timestamp: new Date() });
+    }
+    if (pid) {
       try {
-        const partner = await User.findById(partnerId);
+        const partner = await User.findById(pid);
         if (partner) {
-          // Save pending animation
           partner.pendingAnimation = 'miss_you';
           await partner.save();
 
-          // Create notification in DB
-          if (senderId) {
+          if (sid) {
             await Notification.create({
-              recipient: partnerId,
-              sender: senderId,
+              recipient: pid,
+              sender: sid,
               title: `${senderName || 'Your partner'} Misses you`,
               message: 'Your partner misses you!',
               type: 'other'
@@ -144,20 +164,22 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send_love_you', async ({ room, partnerId, senderId, senderName }) => {
-    socket.to(room).emit('receive_love_you', { timestamp: new Date() });
-    if (partnerId) {
+    const pid = extractId(partnerId);
+    const sid = extractId(senderId);
+    if (room) {
+      socket.to(room).emit('receive_love_you', { timestamp: new Date() });
+    }
+    if (pid) {
       try {
-        const partner = await User.findById(partnerId);
+        const partner = await User.findById(pid);
         if (partner) {
-          // Save pending animation
           partner.pendingAnimation = 'love_you';
           await partner.save();
 
-          // Create notification in DB
-          if (senderId) {
+          if (sid) {
             await Notification.create({
-              recipient: partnerId,
-              sender: senderId,
+              recipient: pid,
+              sender: sid,
               title: `${senderName || 'Your partner'} Loves you`,
               message: 'Your partner loves you!',
               type: 'other'
@@ -173,14 +195,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('update_location', ({ room, location }) => {
-    socket.to(room).emit('receive_location', location);
+    if (room && location) {
+      socket.to(room).emit('receive_location', location);
+    }
   });
 
   socket.on('send_notification', async ({ room, partnerId, title, message }) => {
-    socket.to(room).emit('receive_notification', { title, message, timestamp: new Date() });
-    if (partnerId) {
+    const pid = extractId(partnerId);
+    if (room) {
+      socket.to(room).emit('receive_notification', { title, message, timestamp: new Date() });
+    }
+    if (pid) {
       try {
-        const partner = await User.findById(partnerId);
+        const partner = await User.findById(pid);
         if (partner && partner.pushToken) {
           await sendPushNotification(partner.pushToken, title, message);
         }
@@ -189,24 +216,28 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send_message', ({ room, message }) => {
-    socket.to(room).emit('receive_message', message);
+    if (room && message) {
+      socket.to(room).emit('receive_message', message);
+    }
   });
 
   socket.on('send_heartbeat', async ({ room, partnerId, senderId, senderName }) => {
-    socket.to(room).emit('receive_heartbeat', { senderName, timestamp: new Date() });
-    if (partnerId) {
+    const pid = extractId(partnerId);
+    const sid = extractId(senderId);
+    if (room) {
+      socket.to(room).emit('receive_heartbeat', { senderName, timestamp: new Date() });
+    }
+    if (pid) {
       try {
-        const partner = await User.findById(partnerId);
+        const partner = await User.findById(pid);
         if (partner) {
-          // Save pending animation
           partner.pendingAnimation = 'heartbeat';
           await partner.save();
 
-          // Create notification in DB
-          if (senderId) {
+          if (sid) {
             await Notification.create({
-              recipient: partnerId,
-              sender: senderId,
+              recipient: pid,
+              sender: sid,
               title: `${senderName || 'Your partner'} sent a Heartbeat`,
               message: 'Your partner is thinking of you!',
               type: 'other'
@@ -223,70 +254,171 @@ io.on('connection', (socket) => {
 
   // --- WATCH TOGETHER SOCKET EVENTS ---
   socket.on('join_watch_room', ({ roomCode }) => {
-    socket.join(roomCode);
-    console.log(`User ${socket.id} joined watch room ${roomCode}`);
+    if (!roomCode) return;
+    const normalizedCode = String(roomCode).trim().toUpperCase();
+    socket.join(normalizedCode);
+    socket.to(normalizedCode).emit('participant_joined', { roomCode: normalizedCode });
+    console.log(`User ${socket.id} joined watch room ${normalizedCode}`);
   });
 
   socket.on('leave_watch_room', ({ roomCode }) => {
-    socket.leave(roomCode);
-    console.log(`User ${socket.id} left watch room ${roomCode}`);
+    if (!roomCode) return;
+    const normalizedCode = String(roomCode).trim().toUpperCase();
+    socket.leave(normalizedCode);
+    socket.to(normalizedCode).emit('participant_left', { roomCode: normalizedCode });
+    console.log(`User ${socket.id} left watch room ${normalizedCode}`);
   });
 
   socket.on('media_uploading', ({ roomCode, progress }) => {
-    socket.to(roomCode).emit('receive_media_uploading', { progress });
+    if (!roomCode) return;
+    socket.to(String(roomCode).trim().toUpperCase()).emit('receive_media_uploading', { progress });
   });
 
-  socket.on('invite_partner_watch', ({ partnerId, roomCode, hostName }) => {
-    const partnerSocketId = userSocketMap.get(partnerId);
+  socket.on('invite_partner_watch', async ({ partnerId, roomCode, roomId, hostName, hostId }) => {
+    const pid = extractId(partnerId);
+    const normalizedCode = String(roomCode || '').trim().toUpperCase();
+    if (!pid || !normalizedCode) return;
+
+    const partnerSocketId = userSocketMap.get(pid);
     if (partnerSocketId) {
-      io.to(partnerSocketId).emit('receive_watch_invite', { roomCode, hostName });
+      io.to(partnerSocketId).emit('receive_watch_invite', { roomCode: normalizedCode, roomId, hostName, hostId });
+    }
+
+    try {
+      const partner = await User.findById(pid);
+      if (partner && partner.pushToken) {
+        await sendPushNotification(
+          partner.pushToken,
+          'Watch Together Invite 🍿',
+          `${hostName || 'Your partner'} invited you to watch together! Room Code: ${normalizedCode}`,
+          { roomCode: normalizedCode, roomId }
+        );
+      }
+    } catch (e) {
+      console.error('Error sending watch invite push notification:', e);
     }
   });
 
-  socket.on('accept_watch_invite', ({ hostId, guestName }) => {
-    const hostSocketId = userSocketMap.get(hostId);
-    if (hostSocketId) {
-      io.to(hostSocketId).emit('watch_invite_accepted', { guestName });
+  socket.on('accept_watch_invite', ({ hostId, roomCode, guestName }) => {
+    const hid = extractId(hostId);
+    if (hid) {
+      const hostSocketId = userSocketMap.get(hid);
+      if (hostSocketId) {
+        io.to(hostSocketId).emit('watch_invite_accepted', { guestName });
+      }
+    }
+    if (roomCode) {
+      socket.to(String(roomCode).trim().toUpperCase()).emit('watch_invite_accepted', { guestName });
     }
   });
 
-  socket.on('reject_watch_invite', ({ hostId, guestName }) => {
-    const hostSocketId = userSocketMap.get(hostId);
-    if (hostSocketId) {
-      io.to(hostSocketId).emit('watch_invite_rejected', { guestName });
+  socket.on('reject_watch_invite', ({ hostId, roomCode, guestName }) => {
+    const hid = extractId(hostId);
+    if (hid) {
+      const hostSocketId = userSocketMap.get(hid);
+      if (hostSocketId) {
+        io.to(hostSocketId).emit('watch_invite_rejected', { guestName });
+      }
+    }
+    if (roomCode) {
+      socket.to(String(roomCode).trim().toUpperCase()).emit('watch_invite_rejected', { guestName });
     }
   });
 
-  socket.on('media_play', ({ roomCode, timestamp }) => {
-    socket.to(roomCode).emit('receive_media_play', { timestamp });
+  socket.on('media_play', async ({ roomCode, timestamp }) => {
+    if (!roomCode) return;
+    const normalizedCode = String(roomCode).trim().toUpperCase();
+    socket.to(normalizedCode).emit('receive_media_play', { timestamp });
+    try {
+      await WatchRoom.findOneAndUpdate(
+        { roomCode: normalizedCode },
+        { $set: { 'currentMedia.status': 'playing', 'currentMedia.timestamp': Number(timestamp) || 0 } }
+      );
+    } catch (e) {}
   });
 
-  socket.on('media_pause', ({ roomCode, timestamp }) => {
-    socket.to(roomCode).emit('receive_media_pause', { timestamp });
+  socket.on('media_pause', async ({ roomCode, timestamp }) => {
+    if (!roomCode) return;
+    const normalizedCode = String(roomCode).trim().toUpperCase();
+    socket.to(normalizedCode).emit('receive_media_pause', { timestamp });
+    try {
+      await WatchRoom.findOneAndUpdate(
+        { roomCode: normalizedCode },
+        { $set: { 'currentMedia.status': 'paused', 'currentMedia.timestamp': Number(timestamp) || 0 } }
+      );
+    } catch (e) {}
   });
 
-  socket.on('media_seek', ({ roomCode, timestamp }) => {
-    socket.to(roomCode).emit('receive_media_seek', { timestamp });
+  socket.on('media_seek', async ({ roomCode, timestamp }) => {
+    if (!roomCode) return;
+    const normalizedCode = String(roomCode).trim().toUpperCase();
+    socket.to(normalizedCode).emit('receive_media_seek', { timestamp });
+    try {
+      await WatchRoom.findOneAndUpdate(
+        { roomCode: normalizedCode },
+        { $set: { 'currentMedia.timestamp': Number(timestamp) || 0 } }
+      );
+    } catch (e) {}
   });
 
-  socket.on('sync_media', ({ roomCode, timestamp, playing }) => {
-    socket.to(roomCode).emit('receive_sync_media', { timestamp, playing });
+  socket.on('sync_media', async ({ roomCode, timestamp, playing }) => {
+    if (!roomCode) return;
+    const normalizedCode = String(roomCode).trim().toUpperCase();
+    socket.to(normalizedCode).emit('receive_sync_media', { timestamp, playing });
+    try {
+      await WatchRoom.findOneAndUpdate(
+        { roomCode: normalizedCode },
+        {
+          $set: {
+            'currentMedia.timestamp': Number(timestamp) || 0,
+            'currentMedia.status': playing ? 'playing' : 'paused'
+          }
+        }
+      );
+    } catch (e) {}
   });
 
   socket.on('send_reaction', ({ roomCode, reaction, senderName }) => {
-    socket.to(roomCode).emit('receive_reaction', { reaction, senderName });
+    if (!roomCode) return;
+    socket.to(String(roomCode).trim().toUpperCase()).emit('receive_reaction', { reaction, senderName });
   });
 
-  socket.on('change_media', ({ roomCode, media }) => {
-    socket.to(roomCode).emit('receive_change_media', { media });
+  socket.on('change_media', async ({ roomCode, media }) => {
+    if (!roomCode || !media) return;
+    const normalizedCode = String(roomCode).trim().toUpperCase();
+    socket.to(normalizedCode).emit('receive_change_media', { media });
+    try {
+      await WatchRoom.findOneAndUpdate(
+        { roomCode: normalizedCode },
+        {
+          $set: {
+            currentMedia: {
+              type: media.type || 'none',
+              url: media.url || '',
+              timestamp: 0,
+              status: 'paused'
+            }
+          }
+        }
+      );
+    } catch (e) {}
   });
 
-  socket.on('kick_user', ({ roomCode, userId }) => {
-    socket.to(roomCode).emit('receive_kick_user', { userId });
+  socket.on('kick_user', async ({ roomCode, userId }) => {
+    if (!roomCode) return;
+    const normalizedCode = String(roomCode).trim().toUpperCase();
+    socket.to(normalizedCode).emit('receive_kick_user', { userId });
+    try {
+      await WatchRoom.findOneAndUpdate(
+        { roomCode: normalizedCode },
+        { $pull: { participants: userId } }
+      );
+    } catch (e) {}
   });
 
   socket.on('delete_room', ({ roomCode }) => {
-    socket.to(roomCode).emit('receive_delete_room');
+    if (!roomCode) return;
+    socket.to(String(roomCode).trim().toUpperCase()).emit('receive_delete_room');
   });
 
   socket.on('disconnect', () => {

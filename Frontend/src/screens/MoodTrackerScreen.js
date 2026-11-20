@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, TextInput, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, TextInput, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import { useThemeContext } from '../context/ThemeContext';
 import axiosInstance from '../api/axiosConfig';
 import Toast from 'react-native-toast-message';
 
@@ -20,6 +21,7 @@ const MOODS = [
 export default function MoodTrackerScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
+  const { theme } = useThemeContext();
   
   const [moodLogs, setMoodLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,27 +65,31 @@ export default function MoodTrackerScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
+      <View style={[styles.header, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+        <TouchableOpacity style={[styles.backBtn, { backgroundColor: theme.colors.inputBackground }]} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>Mood Tracker</Text>
+        <Text style={[styles.title, { color: theme.colors.text }]}>Mood Tracker</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView style={styles.content}>
-        <Text style={styles.sectionTitle}>How are you feeling today?</Text>
+      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>How are you feeling today?</Text>
         <View style={styles.moodGrid}>
           {MOODS.map(m => (
             <TouchableOpacity 
               key={m.id}
-              style={[styles.moodItem, selectedMood === m.id && { borderColor: m.color, backgroundColor: m.color + '20' }]}
+              style={[
+                styles.moodItem,
+                { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                selectedMood === m.id && { borderColor: m.color, backgroundColor: m.color + '25' }
+              ]}
               onPress={() => setSelectedMood(m.id)}
               activeOpacity={0.7}
             >
               <Text style={styles.moodIcon}>{m.icon}</Text>
-              <Text style={styles.moodLabel}>{m.label}</Text>
+              <Text style={[styles.moodLabel, { color: theme.colors.text }]}>{m.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -91,8 +97,9 @@ export default function MoodTrackerScreen() {
         {selectedMood && (
           <View style={styles.noteSection}>
             <TextInput
-              style={styles.noteInput}
+              style={[styles.noteInput, { backgroundColor: theme.colors.card, color: theme.colors.text, borderColor: theme.colors.border }]}
               placeholder="Add a note (optional)..."
+              placeholderTextColor={theme.colors.textSecondary}
               value={note}
               onChangeText={setNote}
               multiline
@@ -107,24 +114,24 @@ export default function MoodTrackerScreen() {
           </View>
         )}
 
-        <Text style={[styles.sectionTitle, { marginTop: 30 }]}>Recent Moods</Text>
+        <Text style={[styles.sectionTitle, { marginTop: 30, color: theme.colors.text }]}>Recent Moods</Text>
         {loading ? (
           <ActivityIndicator size="large" color="#ff6b81" style={{ marginTop: 20 }} />
         ) : moodLogs.length === 0 ? (
-          <Text style={styles.emptyText}>No moods logged yet.</Text>
+          <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>No moods logged yet.</Text>
         ) : (
           moodLogs.map(log => {
-            const isMe = log.user === user._id;
+            const isMe = log.user === user?._id;
             const moodObj = MOODS.find(m => m.id === log.mood) || MOODS[0];
             const date = new Date(log.date);
             
             return (
-              <View key={log._id} style={[styles.logCard, { borderLeftColor: moodObj.color }]}>
+              <View key={log._id} style={[styles.logCard, { backgroundColor: theme.colors.card, borderLeftColor: moodObj.color }]}>
                 <View style={styles.logHeader}>
-                  <Text style={styles.logUser}>{isMe ? 'You' : 'Partner'} felt {moodObj.label} {moodObj.icon}</Text>
-                  <Text style={styles.logDate}>{date.toLocaleDateString()} {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                  <Text style={[styles.logUser, { color: theme.colors.text }]}>{isMe ? 'You' : 'Partner'} felt {moodObj.label} {moodObj.icon}</Text>
+                  <Text style={[styles.logDate, { color: theme.colors.textSecondary }]}>{date.toLocaleDateString()} {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                 </View>
-                {log.note ? <Text style={styles.logNote}>{log.note}</Text> : null}
+                {log.note ? <Text style={[styles.logNote, { color: theme.colors.textSecondary }]}>{log.note}</Text> : null}
               </View>
             );
           })
@@ -137,7 +144,6 @@ export default function MoodTrackerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fcfcfc',
   },
   header: {
     flexDirection: 'row',
@@ -146,21 +152,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f1f1',
-    backgroundColor: '#fff',
   },
   backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f1f3f5',
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#1a1a1a',
   },
   content: {
     flex: 1,
@@ -170,7 +172,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 15,
-    color: '#1a1a1a',
   },
   moodGrid: {
     flexDirection: 'row',
@@ -180,13 +181,11 @@ const styles = StyleSheet.create({
   moodItem: {
     width: '30%',
     aspectRatio: 1,
-    backgroundColor: '#fff',
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 15,
     borderWidth: 2,
-    borderColor: '#f1f1f1',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -200,20 +199,17 @@ const styles = StyleSheet.create({
   moodLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#555',
   },
   noteSection: {
     marginTop: 10,
   },
   noteInput: {
-    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 15,
     fontSize: 16,
     minHeight: 80,
     textAlignVertical: 'top',
     borderWidth: 1,
-    borderColor: '#e1e1e1',
     marginBottom: 15,
   },
   submitBtn: {
@@ -229,11 +225,9 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     textAlign: 'center',
-    color: '#888',
     marginTop: 20,
   },
   logCard: {
-    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 15,
     marginBottom: 15,
@@ -253,14 +247,11 @@ const styles = StyleSheet.create({
   logUser: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#1a1a1a',
   },
   logDate: {
     fontSize: 12,
-    color: '#888',
   },
   logNote: {
     fontSize: 14,
-    color: '#555',
   }
 });

@@ -1,6 +1,16 @@
 // GSAP Scroll Animations
 gsap.registerPlugin(ScrollTrigger);
 
+const escapeHTML = (str) => {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+};
+
 // Animate background shapes slowly
 gsap.to('.shape-1', {
     x: 100,
@@ -58,14 +68,14 @@ tiltCards.forEach(card => {
         const centerX = rect.width / 2;
         const centerY = rect.height / 2;
         
-        const rotateX = ((y - centerY) / centerY) * -15; // Max 15deg
+        const rotateX = ((y - centerY) / centerY) * -15;
         const rotateY = ((x - centerX) / centerX) * 15;
         
         card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale(1.05)`;
     });
     
     card.addEventListener('mouseleave', () => {
-        card.style.transform = `perspective(1000px) rotateX(0deg) rotateY(0deg) scale(1)`;
+        card.style.transform = '';
     });
 });
 
@@ -95,19 +105,6 @@ gsap.from('.timeline-item', {
     ease: 'power2.out'
 });
 
-// Scroll Animations for Ratings
-gsap.from('.rating-card', {
-    scrollTrigger: {
-        trigger: '.ratings',
-        start: 'top 80%'
-    },
-    scale: 0.9,
-    opacity: 0,
-    duration: 0.6,
-    stagger: 0.15,
-    ease: 'back.out(1.7)'
-});
-
 // API URL
 const API_URL = 'https://hands-backend.onrender.com/api/website';
 
@@ -115,21 +112,22 @@ const API_URL = 'https://hands-backend.onrender.com/api/website';
 async function loadStats() {
     try {
         const res = await fetch(`${API_URL}/stats`);
+        if (!res.ok) throw new Error('Failed to load stats');
         const stats = await res.json();
         
         const statsBanner = document.getElementById('statsBanner');
         if (statsBanner) {
             statsBanner.innerHTML = `
                 <div class="stat-item">
-                    <h2 class="stat-number">${stats.totalUsers || 0}</h2>
+                    <h2 class="stat-number">${escapeHTML(stats.totalUsers || 0)}</h2>
                     <p class="stat-label">Total Active Users</p>
                 </div>
                 <div class="stat-item">
-                    <h2 class="stat-number">${stats.averageRating || 0}/5</h2>
-                    <p class="stat-label">Overall Rating (${stats.totalReviews || 0} Reviews)</p>
+                    <h2 class="stat-number">${escapeHTML(stats.averageRating || 5)}/5</h2>
+                    <p class="stat-label">Overall Rating (${escapeHTML(stats.totalReviews || 0)} Reviews)</p>
                 </div>
                 <div class="stat-item">
-                    <h2 class="stat-number">${stats.syncAccuracy}</h2>
+                    <h2 class="stat-number">${escapeHTML(stats.syncAccuracy || '99.9%')}</h2>
                     <p class="stat-label">Sync Accuracy</p>
                 </div>
             `;
@@ -143,23 +141,27 @@ async function loadStats() {
 async function loadFeedback() {
     try {
         const res = await fetch(`${API_URL}/feedback`);
+        if (!res.ok) throw new Error('Failed to load feedback');
         const feedback = await res.json();
         
         const grid = document.getElementById('feedbackGrid');
         if (!grid) return;
         
-        if (feedback.length === 0) {
+        if (!Array.isArray(feedback) || feedback.length === 0) {
             grid.innerHTML = '<p style="text-align: center; width: 100%; color: var(--text-secondary);">Nothing to show right now.</p>';
             return;
         }
         
-        grid.innerHTML = feedback.map(item => `
-            <div class="rating-card">
-                <div class="stars">${'⭐'.repeat(item.rating)}</div>
-                <p>"${item.comment}"</p>
-                <div class="user">- ${item.name}</div>
-            </div>
-        `).join('');
+        grid.innerHTML = feedback.map(item => {
+            const safeRating = Math.min(5, Math.max(1, Number(item.rating) || 5));
+            return `
+                <div class="rating-card">
+                    <div class="stars">${'⭐'.repeat(safeRating)}</div>
+                    <p>"${escapeHTML(item.comment)}"</p>
+                    <div class="user">- ${escapeHTML(item.name)}</div>
+                </div>
+            `;
+        }).join('');
     } catch (err) {
         console.error('Error loading feedback:', err);
     }
@@ -169,21 +171,22 @@ async function loadFeedback() {
 async function loadQuestions() {
     try {
         const res = await fetch(`${API_URL}/questions`);
+        if (!res.ok) throw new Error('Failed to load questions');
         const questions = await res.json();
         
         const grid = document.getElementById('questionGrid');
         if (!grid) return;
         
-        if (questions.length === 0) {
+        if (!Array.isArray(questions) || questions.length === 0) {
             grid.innerHTML = '<p style="text-align: center; width: 100%; color: var(--text-secondary);">Nothing to show right now.</p>';
             return;
         }
         
         grid.innerHTML = questions.map(q => `
             <div class="rating-card question-card">
-                <div class="user">${q.name} asked:</div>
-                <p class="q-text">"${q.question}"</p>
-                <div class="reply"><strong>HandS Team:</strong> ${q.reply || 'Thanks for your question! We will reply soon.'}</div>
+                <div class="user">${escapeHTML(q.name)} asked:</div>
+                <p class="q-text">"${escapeHTML(q.question)}"</p>
+                <div class="reply"><strong>HandS Team:</strong> ${escapeHTML(q.reply || 'Thanks for your question! We will reply soon.')}</div>
             </div>
         `).join('');
     } catch (err) {
@@ -192,10 +195,22 @@ async function loadQuestions() {
 }
 
 // Load all data on init
-document.addEventListener('DOMContentLoaded', () => {
-    loadStats();
-    loadFeedback();
-    loadQuestions();
+document.addEventListener('DOMContentLoaded', async () => {
+    await Promise.all([loadStats(), loadFeedback(), loadQuestions()]);
+    const cards = document.querySelectorAll('.rating-card');
+    if (cards.length > 0) {
+        gsap.from(cards, {
+            scrollTrigger: {
+                trigger: '.ratings',
+                start: 'top 80%'
+            },
+            scale: 0.9,
+            opacity: 0,
+            duration: 0.6,
+            stagger: 0.15,
+            ease: 'back.out(1.7)'
+        });
+    }
 });
 
 // Handle Contact Form Submission
@@ -225,9 +240,7 @@ if (contactForm) {
             if (res.ok) {
                 const newQuestion = await res.json();
                 
-                // Add to UI
                 const grid = document.getElementById('questionGrid');
-                // Remove empty state text if exists
                 if (grid.innerHTML.includes('Nothing to show right now')) {
                     grid.innerHTML = '';
                 }
@@ -235,8 +248,8 @@ if (contactForm) {
                 const newCard = document.createElement('div');
                 newCard.className = 'rating-card question-card';
                 newCard.innerHTML = `
-                    <div class="user">${newQuestion.name} asked:</div>
-                    <p class="q-text">"${newQuestion.question}"</p>
+                    <div class="user">${escapeHTML(newQuestion.name)} asked:</div>
+                    <p class="q-text">"${escapeHTML(newQuestion.question)}"</p>
                     <div class="reply"><strong>HandS Team:</strong> Thanks for your question! We will reply soon.</div>
                 `;
                 
@@ -249,6 +262,8 @@ if (contactForm) {
                 formStatus.innerText = 'Question submitted! It will appear below shortly.';
                 
                 setTimeout(() => { formStatus.style.display = 'none'; }, 3000);
+            } else {
+                throw new Error('Request failed');
             }
         } catch (err) {
             console.error('Submit error:', err);

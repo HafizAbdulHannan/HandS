@@ -1,21 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Dimensions, Modal, TextInput, Alert, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Modal, TextInput, Alert, Share, RefreshControl, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { Video } from 'expo-av';
 import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
-import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
+import axiosInstance, { getMediaUrl } from '../api/axiosConfig';
 import Toast from 'react-native-toast-message';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
-  const { user, logout, loadUser } = useAuth();
-  const { isDarkMode, toggleTheme, theme } = useThemeContext();
+  const { user } = useAuth();
+  const { theme } = useThemeContext();
   const isFocused = useIsFocused();
   
   const [posts, setPosts] = useState([]);
   const [partner, setPartner] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [activeCommentPostId, setActiveCommentPostId] = useState(null);
+  const [commentText, setCommentText] = useState('');
+  const [isCommenting, setIsCommenting] = useState(false);
 
   // Edit & Options state
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
@@ -50,6 +56,60 @@ export default function ProfileScreen() {
       }
     } else {
       setPartner(null);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchMyPosts(), fetchPartner()]);
+    setRefreshing(false);
+  };
+
+  const handleLike = async (postId, currentLikes = []) => {
+    const userId = user?._id;
+    const isLiked = currentLikes.includes(userId);
+
+    setPosts(posts.map(post => {
+      if (post._id === postId) {
+        let newLikes = [...(post.likes || [])];
+        if (isLiked) {
+          newLikes = newLikes.filter(id => id !== userId);
+        } else {
+          newLikes.push(userId);
+        }
+        return { ...post, likes: newLikes };
+      }
+      return post;
+    }));
+
+    try {
+      await axiosInstance.put(`/posts/${postId}/like`);
+    } catch (error) {
+      console.log('Error toggling like:', error);
+      fetchMyPosts();
+    }
+  };
+
+  const handleAddComment = async (postId) => {
+    if (!commentText.trim()) return;
+    setIsCommenting(true);
+    try {
+      const response = await axiosInstance.post(`/posts/${postId}/comment`, {
+        text: commentText
+      });
+      setPosts(posts.map(post => {
+        if (post._id === postId) {
+          return { ...post, comments: response.data };
+        }
+        return post;
+      }));
+      setCommentText('');
+      Toast.show({ type: 'success', text1: 'Comment Added', text2: 'Your comment was added successfully.' });
+    } catch (error) {
+      console.log('Error adding comment:', error);
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to add comment' });
+    } finally {
+      setIsCommenting(false);
     }
   };
 
@@ -110,12 +170,10 @@ export default function ProfileScreen() {
     );
   };
 
-
-
   const handleShareProfile = async () => {
     try {
       await Share.share({
-        message: `Check out my profile on HandS! My username is ${user?.username}`,
+        message: `Connect with me on HandS! My username is @${user?.username}`,
       });
     } catch (error) {
       console.log('Error sharing profile:', error);
@@ -126,6 +184,40 @@ export default function ProfileScreen() {
   const totalLikes = posts.reduce((sum, post) => sum + (post.likes?.length || 0), 0);
   const totalComments = posts.reduce((sum, post) => sum + (post.comments?.length || 0), 0);
 
+  const renderPostMedia = (item) => {
+    if (!item.mediaUrl || item.mediaType === 'none') return null;
+    const resolvedUrl = getMediaUrl(item.mediaUrl);
+
+    if (item.mediaType === 'image' || item.mediaType === 'drawing') {
+      return <Image source={{ uri: resolvedUrl }} style={styles.feedPostImage} />;
+    }
+
+    if (item.mediaType === 'video') {
+      return (
+        <Video
+          source={{ uri: resolvedUrl }}
+          style={styles.feedPostImage}
+          useNativeControls
+          resizeMode="contain"
+        />
+      );
+    }
+
+    if (item.mediaType === 'file') {
+      const fileName = item.mediaUrl.split('/').pop() || 'Attached Document';
+      return (
+        <TouchableOpacity
+          style={[styles.fileAttachmentBox, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]}
+          onPress={() => Linking.openURL(resolvedUrl).catch(() => {})}
+        >
+          <Ionicons name="document-text" size={26} color={theme.colors.primary} />
+          <Text style={[styles.fileAttachmentName, { color: theme.colors.text }]} numberOfLines={1}>{fileName}</Text>
+        </TouchableOpacity>
+      );
+    }
+    return null;
+  };
+
   const renderHeader = () => (
     <View style={[styles.profileHeader, { backgroundColor: theme.colors.background, borderBottomColor: theme.colors.border }]}>
       <View style={styles.topBar}>
@@ -133,18 +225,21 @@ export default function ProfileScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginRight: 15 }}>
             <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
-          <Text style={[styles.topUsername, { color: theme.colors.text }]}>{user?.username || 'User'}</Text>
+          <Text style={[styles.topUsername, { color: theme.colors.text }]}>@{user?.username || 'user'}</Text>
         </View>
+        <TouchableOpacity onPress={() => navigation.navigate('EditProfile')} style={{ padding: 4 }}>
+          <Ionicons name="create-outline" size={24} color={theme.colors.primary} />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.infoSection}>
-        <View style={styles.avatarContainer}>
+        <TouchableOpacity onPress={() => navigation.navigate('EditProfile')} style={styles.avatarContainer} activeOpacity={0.85}>
           {user?.avatar ? (
             <Image source={{ uri: getMediaUrl(user.avatar) }} style={styles.avatarImage} />
           ) : (
             <Text style={styles.avatarText}>{user?.username ? user.username.charAt(0).toUpperCase() : 'U'}</Text>
           )}
-        </View>
+        </TouchableOpacity>
         <View style={styles.statsContainer}>
           <View style={styles.statBox}>
             <Text style={[styles.statNumber, { color: theme.colors.text }]}>{totalPosts}</Text>
@@ -163,24 +258,42 @@ export default function ProfileScreen() {
 
       <View style={styles.bioSection}>
         <Text style={[styles.name, { color: theme.colors.text }]}>{user?.fullName || user?.username || 'User'}</Text>
+        {user?.email ? (
+          <Text style={[styles.emailText, { color: theme.colors.textSecondary }]}>{user.email}</Text>
+        ) : null}
         {user?.bio ? (
           <Text style={[styles.bioText, { color: theme.colors.text }]}>{user.bio}</Text>
         ) : null}
         {partner ? (
-          <Text style={[styles.partnerText, { color: theme.colors.textSecondary }]}>
-            <Ionicons name="heart" size={14} color="#ff6b81" /> Paired with {partner.username}
-          </Text>
+          <TouchableOpacity
+            style={styles.partnerBadge}
+            onPress={() => navigation.navigate('PartnerProfile')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="heart" size={14} color="#ff6b81" />
+            <Text style={styles.partnerBadgeText}>Paired with @{partner.username}</Text>
+            <Ionicons name="chevron-forward" size={14} color="#ff6b81" />
+          </TouchableOpacity>
         ) : (
-          <Text style={[styles.partnerText, { color: theme.colors.textSecondary }]}>No partner connected</Text>
+          <TouchableOpacity
+            style={[styles.partnerBadge, { borderColor: theme.colors.border, backgroundColor: theme.colors.inputBackground }]}
+            onPress={() => navigation.navigate('Pairing')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="person-add-outline" size={14} color={theme.colors.primary} />
+            <Text style={[styles.partnerBadgeText, { color: theme.colors.textSecondary }]}>No partner connected • Tap to link</Text>
+          </TouchableOpacity>
         )}
       </View>
       
       <View style={styles.actionButtonsContainer}>
-        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.colors.inputBackground }]} onPress={() => navigation.navigate('EditProfile')}>
-          <Text style={[styles.actionBtnText, { color: theme.colors.text }]}>Edit profile</Text>
+        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.colors.primary }]} onPress={() => navigation.navigate('EditProfile')}>
+          <Ionicons name="pencil-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
+          <Text style={[styles.actionBtnText, { color: '#fff' }]}>Edit Profile</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.colors.inputBackground }]} onPress={handleShareProfile}>
-          <Text style={[styles.actionBtnText, { color: theme.colors.text }]}>Share profile</Text>
+        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border, borderWidth: 1 }]} onPress={handleShareProfile}>
+          <Ionicons name="share-social-outline" size={16} color={theme.colors.text} style={{ marginRight: 6 }} />
+          <Text style={[styles.actionBtnText, { color: theme.colors.text }]}>Share Profile</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -188,7 +301,7 @@ export default function ProfileScreen() {
 
   const renderPost = ({ item }) => {
     return (
-      <View style={[styles.postCard, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+      <View style={[styles.postCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
         <View style={styles.postHeader}>
           <View style={[styles.avatarPlaceholder, { overflow: 'hidden' }]}>
             {item.author?.avatar ? (
@@ -211,7 +324,7 @@ export default function ProfileScreen() {
         {editingPostId === item._id ? (
           <View style={styles.editPostContainer}>
             <TextInput
-              style={[styles.editPostInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
+              style={[styles.editPostInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text, borderColor: theme.colors.border }]}
               value={editContent}
               onChangeText={setEditContent}
               multiline
@@ -229,20 +342,51 @@ export default function ProfileScreen() {
           item.content ? <Text style={[styles.postText, { color: theme.colors.text }]}>{item.content}</Text> : null
         )}
         
-        {item.mediaUrl && item.mediaType === 'image' && (
-          <Image source={{ uri: `${STATIC_URL}${item.mediaUrl}` }} style={styles.feedPostImage} />
-        )}
+        {renderPostMedia(item)}
         
-        <View style={styles.postFooter}>
-          <View style={styles.actionButton}>
+        <View style={[styles.postFooter, { borderTopColor: theme.colors.border }]}>
+          <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(item._id, item.likes)}>
             <Ionicons name={item.likes?.includes(user?._id) ? "heart" : "heart-outline"} size={24} color={item.likes?.includes(user?._id) ? "#ff6b81" : theme.colors.textSecondary} />
             <Text style={[styles.actionText, { color: theme.colors.textSecondary }]}>{item.likes?.length || 0}</Text>
-          </View>
-          <View style={styles.actionButton}>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton} onPress={() => { setActiveCommentPostId(activeCommentPostId === item._id ? null : item._id); setCommentText(''); }}>
             <Ionicons name="chatbubble-outline" size={22} color={theme.colors.textSecondary} />
             <Text style={[styles.actionText, { color: theme.colors.textSecondary }]}>{item.comments?.length || 0}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
+
+        {activeCommentPostId === item._id && (
+          <View style={[styles.commentSection, { borderTopColor: theme.colors.border }]}>
+            {item.comments?.map((comment, index) => (
+              <View key={index} style={[styles.commentItem, { backgroundColor: theme.colors.inputBackground }]}>
+                <Text style={[styles.commentAuthor, { color: theme.colors.text }]}>{comment.user?.username || 'User'}</Text>
+                <Text style={[styles.commentText, { color: theme.colors.textSecondary }]}>{comment.text}</Text>
+              </View>
+            ))}
+
+            <View style={styles.commentInputContainer}>
+              <TextInput
+                style={[styles.commentInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
+                placeholder="Write a comment..."
+                placeholderTextColor={theme.colors.textSecondary}
+                value={commentText}
+                onChangeText={setCommentText}
+                multiline
+              />
+              <TouchableOpacity
+                style={styles.sendCommentBtn}
+                onPress={() => handleAddComment(item._id)}
+                disabled={isCommenting || !commentText.trim()}
+              >
+                {isCommenting ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="send" size={16} color="#fff" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </View>
     );
   };
@@ -256,6 +400,7 @@ export default function ProfileScreen() {
         renderItem={renderPost}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="images-outline" size={60} color={theme.colors.textSecondary} />
@@ -296,16 +441,14 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
   },
   listContent: {
     paddingBottom: 40,
   },
   profileHeader: {
-    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f1f1',
-    paddingBottom: 15,
+    paddingBottom: 18,
+    marginBottom: 12,
   },
   topBar: {
     flexDirection: 'row',
@@ -318,7 +461,6 @@ const styles = StyleSheet.create({
   topUsername: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#1a1a1a',
   },
   infoSection: {
     flexDirection: 'row',
@@ -327,17 +469,19 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     backgroundColor: '#ff6b81',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 30,
+    marginRight: 26,
     overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#ff6b81',
   },
   avatarText: {
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: 'bold',
     color: '#ffffff',
   },
@@ -355,49 +499,60 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#1a1a1a',
   },
   statLabel: {
     fontSize: 13,
-    color: '#1a1a1a',
+    marginTop: 2,
   },
   bioSection: {
     paddingHorizontal: 20,
-    marginBottom: 15,
+    marginBottom: 16,
   },
   name: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: 'bold',
-    color: '#1a1a1a',
     marginBottom: 2,
+  },
+  emailText: {
+    fontSize: 13,
+    marginBottom: 6,
   },
   bioText: {
     fontSize: 14,
-    marginBottom: 4,
+    lineHeight: 20,
+    marginBottom: 10,
   },
-  email: {
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 4,
+  partnerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 107, 129, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 129, 0.3)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
   },
-  partnerText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#555',
+  partnerBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ff6b81',
   },
   actionButtonsContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
     justifyContent: 'space-between',
-    gap: 8,
+    gap: 10,
   },
   actionBtn: {
     flex: 1,
-    backgroundColor: '#f1f1f1',
-    paddingVertical: 8,
-    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
     alignItems: 'center',
   },
   actionBtnText: {
@@ -405,18 +560,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   postCard: {
-    backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 20,
     marginBottom: 16,
     marginHorizontal: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.06,
     shadowRadius: 5,
-    elevation: 3,
+    elevation: 2,
   },
   postHeader: { 
     flexDirection: 'row', 
@@ -456,7 +609,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   editPostContainer: {
-    paddingHorizontal: 20,
     marginTop: 10,
     marginBottom: 10,
   },
@@ -467,13 +619,11 @@ const styles = StyleSheet.create({
     minHeight: 60,
     textAlignVertical: 'top',
     borderWidth: 1,
-    borderColor: '#e1e1e1',
   },
   editPostActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     marginTop: 12,
-    paddingHorizontal: 20,
   },
   editCancelBtn: {
     paddingHorizontal: 16,
@@ -525,15 +675,29 @@ const styles = StyleSheet.create({
   },
   feedPostImage: {
     width: '100%',
-    height: 200,
+    height: 220,
     borderRadius: 12,
-    marginBottom: 12
+    marginBottom: 12,
+    backgroundColor: '#000',
+  },
+  fileAttachmentBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+    gap: 10,
+  },
+  fileAttachmentName: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
   },
   postFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#f1f1f1',
     paddingTop: 12,
   },
   actionButton: {
@@ -546,6 +710,48 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
+  commentSection: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    paddingTop: 12,
+  },
+  commentItem: {
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  commentAuthor: {
+    fontWeight: 'bold',
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  commentText: {
+    fontSize: 14,
+  },
+  commentInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginTop: 8,
+  },
+  commentInput: {
+    flex: 1,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
+    minHeight: 40,
+    maxHeight: 100,
+    fontSize: 14,
+  },
+  sendCommentBtn: {
+    backgroundColor: '#ff6b81',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
   emptyContainer: {
     alignItems: 'center',
     marginTop: 80,
@@ -554,6 +760,5 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 18,
     fontWeight: '600',
-    color: '#ccc',
   }
 });

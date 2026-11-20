@@ -1,18 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, ActivityIndicator, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeContext } from '../context/ThemeContext';
 import Toast from 'react-native-toast-message';
-import { TouchableOpacity, TextInput } from 'react-native';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axiosInstance from '../api/axiosConfig';
 
 export default function MapScreen() {
-  const { theme, isDarkMode } = useThemeContext();
+  const { theme } = useThemeContext();
   const [location, setLocation] = useState(null);
   const [speed, setSpeed] = useState(0);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -29,17 +29,14 @@ export default function MapScreen() {
   const [tripETA, setTripETA] = useState('');
   const [isRouting, setIsRouting] = useState(false);
   const [isPanelExpanded, setIsPanelExpanded] = useState(true);
-
-  // Map Ref
-  const mapRef = React.useRef(null);
   
   // Live Location States
   const { socket } = useSocket();
   const { user } = useAuth();
-  const room = user && user.partner ? [user._id, user.partner].sort().join('_') : null;
+  const partnerId = typeof user?.partner === 'object' ? user?.partner?._id : user?.partner;
+  const room = user?._id && partnerId ? [user._id, partnerId].sort().join('_') : null;
   const [partnerLocation, setPartnerLocation] = useState(null);
 
-  // Refs to access latest state in location callback without re-subscribing
   const isSharingLiveRef = React.useRef(isSharingLive);
   const socketRef = React.useRef(socket);
   const roomRef = React.useRef(room);
@@ -48,7 +45,6 @@ export default function MapScreen() {
   useEffect(() => { socketRef.current = socket; }, [socket]);
   useEffect(() => { roomRef.current = room; }, [room]);
 
-  // Leaflet WebView setup
   const webViewRef = React.useRef(null);
   
   const leafletHTML = `
@@ -95,12 +91,11 @@ export default function MapScreen() {
           iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
         });
 
-        document.addEventListener('message', function(e) {
+        function handleMapMessage(e) {
           try {
             var data = JSON.parse(e.data);
             
             if (data.type === 'SYNC') {
-              // Update my location
               if (data.myLoc) {
                 if (!myMarker) {
                   myMarker = L.marker([data.myLoc.latitude, data.myLoc.longitude], {icon: myIcon}).addTo(map);
@@ -114,7 +109,6 @@ export default function MapScreen() {
                 }
               }
               
-              // Update partner location
               if (data.partnerLoc) {
                 if (!partnerMarker) {
                   partnerMarker = L.marker([data.partnerLoc.latitude, data.partnerLoc.longitude], {icon: partnerIcon}).addTo(map);
@@ -130,7 +124,6 @@ export default function MapScreen() {
                 partnerMarker = null;
               }
               
-              // Update Route
               if (data.tripActive && data.route && data.route.length > 0 && data.activeTab === 'me') {
                 var latlngs = data.route.map(c => [c.latitude, c.longitude]);
                 if (!routeLine) {
@@ -146,7 +139,6 @@ export default function MapScreen() {
                   destMarker.setLatLng([destLoc.latitude, destLoc.longitude]);
                 }
                 
-                // Only fit bounds on first route load
                 if (data.isNewRoute) {
                   map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
                 }
@@ -160,11 +152,31 @@ export default function MapScreen() {
               map.setView([data.lat, data.lng], 15);
             }
           } catch(err) {}
-        });
+        }
+
+        document.addEventListener('message', handleMapMessage);
+        window.addEventListener('message', handleMapMessage);
       </script>
     </body>
     </html>
   `;
+
+  // Fetch partner's last saved location from DB on mount
+  useEffect(() => {
+    const fetchSavedPartnerLocation = async () => {
+      if (!partnerId) return;
+      try {
+        const res = await axiosInstance.get('/pairing/partner');
+        if (res.data?.location?.lat != null && res.data?.location?.lng != null) {
+          setPartnerLocation({
+            latitude: res.data.location.lat,
+            longitude: res.data.location.lng,
+          });
+        }
+      } catch (e) {}
+    };
+    fetchSavedPartnerLocation();
+  }, [partnerId]);
 
   // Sync state to WebView
   useEffect(() => {
@@ -179,7 +191,7 @@ export default function MapScreen() {
         isNewRoute: routeCoordinates.length > 0 && isRouting === false
       }));
     }
-  }, [location, partnerLocation, activeTab, tripActive, routeCoordinates]);
+  }, [location, partnerLocation, activeTab, tripActive, routeCoordinates, isRouting]);
 
   useEffect(() => {
     if (socket) {
@@ -225,7 +237,6 @@ export default function MapScreen() {
         },
         (loc) => {
           setLocation(loc.coords);
-          // Convert speed from m/s to km/h (if available and > 0)
           const currentSpeed = loc.coords.speed && loc.coords.speed > 0 ? (loc.coords.speed * 3.6).toFixed(1) : 0;
           setSpeed(currentSpeed);
           
@@ -251,8 +262,10 @@ export default function MapScreen() {
     
     setIsRouting(true);
     try {
-      // 1. Geocode destination using Nominatim
-      const geocodeResponse = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination)}&format=json&limit=1`);
+      const geocodeResponse = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination.trim())}&format=json&limit=1`,
+        { headers: { 'User-Agent': 'HandSCoupleApp/1.0' } }
+      );
       const geocodeData = await geocodeResponse.json();
       
       if (!geocodeData || geocodeData.length === 0) {
@@ -264,17 +277,15 @@ export default function MapScreen() {
       const destLat = parseFloat(geocodeData[0].lat);
       const destLon = parseFloat(geocodeData[0].lon);
 
-      // 2. Route using OSRM
       const startLon = location.longitude;
       const startLat = location.latitude;
       
-      const osrmResponse = await fetch(`http://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${destLon},${destLat}?overview=full&geometries=geojson`);
+      const osrmResponse = await fetch(`https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${destLon},${destLat}?overview=full&geometries=geojson`);
       const osrmData = await osrmResponse.json();
 
       if (osrmData.code === "Ok" && osrmData.routes.length > 0) {
         const route = osrmData.routes[0];
         
-        // Convert GeoJSON coordinates [lon, lat] to { latitude, longitude } for React Native Maps
         const polylineCoords = route.geometry.coordinates.map(coord => ({
           latitude: coord[1],
           longitude: coord[0]
@@ -282,11 +293,9 @@ export default function MapScreen() {
 
         setRouteCoordinates(polylineCoords);
         
-        // Distance is in meters, convert to km
         const distKm = (route.distance / 1000).toFixed(1);
         setTripDistance(`${distKm} km`);
 
-        // Duration is in seconds, convert to minutes/hours
         const durationMin = Math.round(route.duration / 60);
         if (durationMin > 60) {
           const hrs = Math.floor(durationMin / 60);
@@ -341,7 +350,15 @@ export default function MapScreen() {
           }));
         }
       } else {
-        // Just trigger a re-render/recentering for partner if location exists
+        if (partnerId) {
+          const res = await axiosInstance.get('/pairing/partner');
+          if (res.data?.location?.lat != null && res.data?.location?.lng != null) {
+            setPartnerLocation({
+              latitude: res.data.location.lat,
+              longitude: res.data.location.lng,
+            });
+          }
+        }
         handleRecenter();
       }
     } catch (e) {
@@ -392,7 +409,19 @@ export default function MapScreen() {
               scrollEnabled={false}
               showsHorizontalScrollIndicator={false}
               showsVerticalScrollIndicator={false}
-              onMessage={(event) => {}}
+              onLoadEnd={() => {
+                if (webViewRef.current && location) {
+                  webViewRef.current.postMessage(JSON.stringify({
+                    type: 'SYNC',
+                    myLoc: location,
+                    partnerLoc: partnerLocation,
+                    activeTab,
+                    tripActive,
+                    route: routeCoordinates,
+                    isNewRoute: false
+                  }));
+                }
+              }}
             />
             
             {/* Live Speed Badge */}
@@ -438,9 +467,14 @@ export default function MapScreen() {
                             console.log('Failed to save sharing state', e);
                           }
                           
-                          
                           if (newState) {
                             try {
+                              if (location) {
+                                await axiosInstance.put('/auth/location', {
+                                  latitude: location.latitude,
+                                  longitude: location.longitude,
+                                });
+                              }
                               const { status } = await Location.requestBackgroundPermissionsAsync();
                               if (status === 'granted') {
                                 await Location.startLocationUpdatesAsync('background-location-task', {
@@ -583,19 +617,16 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: '#ffffff' 
   },
   header: {
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 20,
-    backgroundColor: '#ffffff',
     zIndex: 10,
   },
   title: { 
     fontSize: 34, 
     fontWeight: '800', 
-    color: '#1a1a1a' 
   },
   mapContainer: {
     flex: 1,
@@ -616,14 +647,12 @@ const styles = StyleSheet.create({
     flex: 1, 
     justifyContent: 'center', 
     alignItems: 'center',
-    backgroundColor: '#f8f9fa'
   },
   errorIcon: {
     fontSize: 40,
     marginBottom: 10,
   },
   errorText: { 
-    color: '#1a1a1a', 
     fontSize: 16,
     fontWeight: '500',
   },

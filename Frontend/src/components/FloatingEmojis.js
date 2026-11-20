@@ -2,78 +2,88 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Animated, StyleSheet, Dimensions, Easing } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
-const EMOJI_COUNT = 25;
+const EMOJI_COUNT = 22;
 
 export default function FloatingEmojis({ emoji, text }) {
   const [emojis, setEmojis] = useState([]);
 
   useEffect(() => {
-    // Generate emojis with random initial positions and animations
     const newEmojis = Array.from({ length: EMOJI_COUNT }).map((_, i) => ({
       id: i,
-      x: Math.random() * width,
-      size: Math.random() * 20 + 35, // 35 to 55
+      x: Math.random() * (width - 60),
+      size: Math.random() * 18 + 34,
       translateY: new Animated.Value(height),
       opacity: new Animated.Value(0),
-      translateX: new Animated.Value(Math.random() * width),
+      translateX: new Animated.Value(Math.random() * (width - 60)),
     }));
 
     setEmojis(newEmojis);
 
-    newEmojis.forEach((e) => {
-      // Randomize animation duration and delay
-      const duration = Math.random() * 4000 + 4000; // 4 to 8 seconds
-      const delay = Math.random() * 1500;
-      
-      const swayAmount = Math.random() * 50 + 30; // 30 to 80 sway
+    const runningAnimations = [];
 
-      Animated.parallel([
+    newEmojis.forEach((e) => {
+      const duration = Math.random() * 2500 + 3000;
+      const delay = Math.random() * 1000;
+      const swayAmount = Math.random() * 45 + 25;
+
+      const mainAnim = Animated.parallel([
         Animated.timing(e.translateY, {
-          toValue: -150, // Move well above screen
+          toValue: -150,
           duration: duration,
           delay: delay,
-          easing: Easing.out(Easing.ease), // Smooth deceleration
+          easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }),
         Animated.sequence([
           Animated.timing(e.opacity, {
             toValue: 1,
-            duration: 800,
+            duration: 600,
             delay: delay,
             useNativeDriver: true,
           }),
           Animated.timing(e.opacity, {
             toValue: 0,
-            duration: duration - 800,
+            duration: Math.max(500, duration - 600),
             useNativeDriver: true,
           }),
         ]),
-      ]).start();
+      ]);
 
-      // Continuous smooth swaying back and forth
-      Animated.loop(
+      const loopAnim = Animated.loop(
         Animated.sequence([
           Animated.timing(e.translateX, {
             toValue: e.x + swayAmount,
-            duration: 1500 + Math.random() * 1000,
+            duration: 1200 + Math.random() * 800,
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
           Animated.timing(e.translateX, {
             toValue: e.x - swayAmount,
-            duration: 3000 + Math.random() * 2000,
+            duration: 2400 + Math.random() * 1200,
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
           Animated.timing(e.translateX, {
             toValue: e.x,
-            duration: 1500 + Math.random() * 1000,
+            duration: 1200 + Math.random() * 800,
             easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
         ])
-      ).start();
+      );
+
+      runningAnimations.push(mainAnim, loopAnim);
+      mainAnim.start();
+      loopAnim.start();
     });
+
+    return () => {
+      runningAnimations.forEach((anim) => {
+        try {
+          anim.stop();
+        } catch (err) {}
+      });
+    };
   }, [emoji, text]);
 
   return (
@@ -94,7 +104,7 @@ export default function FloatingEmojis({ emoji, text }) {
               styles.emoji,
               {
                 fontSize: e.size,
-                lineHeight: e.size * 1.5, // Prevents emoji from being cut off vertically
+                lineHeight: e.size * 1.4,
               },
             ]}
           >
@@ -122,15 +132,15 @@ const styles = StyleSheet.create({
   emoji: {
     includeFontPadding: false,
     textAlignVertical: 'center',
-    padding: 10,
+    padding: 8,
   },
   floatingText: {
     color: '#ff6b81',
     fontWeight: 'bold',
     textAlign: 'center',
-    marginTop: -8,
-    textShadowColor: 'rgba(255,255,255,0.8)',
+    marginTop: -6,
+    textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadowRadius: 3,
   },
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Platform, Alert } from 'react-native';
+import { Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import axiosInstance from '../api/axiosConfig';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -8,7 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import * as Haptics from 'expo-haptics';
+import { useThemeContext } from '../context/ThemeContext';
 
 // Import Screens
 import SplashScreen from '../screens/SplashScreen';
@@ -29,7 +29,7 @@ import SettingScreen from '../screens/SettingScreen';
 import FeedbackScreen from '../screens/FeedbackScreen';
 import AboutScreen from '../screens/AboutScreen';
 import PolicyScreen from '../screens/PolicyScreen';
-import NotificationScreen from '../screens/NotificationScreen'; // NEW
+import NotificationScreen from '../screens/NotificationScreen';
 import PartnerProfileScreen from '../screens/PartnerProfileScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import MoreScreen from '../screens/MoreScreen';
@@ -49,6 +49,7 @@ function MainTabs() {
   const [pendingCount, setPendingCount] = useState(0);
   const { socket } = useSocket();
   const { user } = useAuth();
+  const { theme, isDarkMode } = useThemeContext();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
@@ -74,23 +75,46 @@ function MainTabs() {
       const handleNewNotification = () => fetchRequestsCount();
       socket.on('receive_notification', handleNewNotification);
       
-      const handleWatchInvite = ({ roomCode, hostName }) => {
+      const handleWatchInvite = ({ roomCode, roomId, hostName, hostId }) => {
+        const targetHostId = hostId || (typeof user.partner === 'object' ? user.partner?._id : user.partner);
         Alert.alert(
-          'Watch Room Invite',
-          `${hostName} has invited you to watch something together!`,
+          'Watch Room Invite 🍿',
+          `${hostName || 'Your partner'} has invited you to watch something together!`,
           [
             { 
               text: 'Decline', 
               style: 'cancel',
               onPress: () => {
-                socket.emit('reject_watch_invite', { hostId: typeof user.partner === 'object' ? user.partner._id : user.partner, guestName: user.fullName || user.username });
+                socket.emit('reject_watch_invite', {
+                  hostId: targetHostId,
+                  roomCode,
+                  guestName: user.fullName || user.username
+                });
               }
             },
             { 
               text: 'Accept', 
-              onPress: () => {
-                socket.emit('accept_watch_invite', { hostId: typeof user.partner === 'object' ? user.partner._id : user.partner, guestName: user.fullName || user.username });
-                navigation.navigate('WatchRoom', { roomCode, isHost: false });
+              onPress: async () => {
+                socket.emit('accept_watch_invite', {
+                  hostId: targetHostId,
+                  roomCode,
+                  guestName: user.fullName || user.username
+                });
+                try {
+                  const res = await axiosInstance.post('/watch/join', { roomCode });
+                  const joinedRoom = res?.data?.room;
+                  navigation.navigate('WatchRoom', {
+                    roomCode: joinedRoom?.roomCode || roomCode,
+                    roomId: joinedRoom?._id || roomId || roomCode,
+                    isHost: false
+                  });
+                } catch (err) {
+                  navigation.navigate('WatchRoom', {
+                    roomCode,
+                    roomId: roomId || roomCode,
+                    isHost: false
+                  });
+                }
               }
             }
           ]
@@ -109,16 +133,17 @@ function MainTabs() {
     <Tab.Navigator 
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: '#ff6b81',
-        tabBarInactiveTintColor: '#c8d6e5',
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: isDarkMode ? '#888888' : '#95a5a6',
         tabBarShowLabel: true,
         tabBarStyle: { 
-          backgroundColor: '#ffffff', 
-          borderTopWidth: 0,
+          backgroundColor: theme.colors.card, 
+          borderTopWidth: isDarkMode ? 1 : 0,
+          borderTopColor: theme.colors.border,
           elevation: 20,
           shadowColor: '#ff6b81',
           shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.1,
+          shadowOpacity: isDarkMode ? 0.05 : 0.1,
           shadowRadius: 15,
           borderTopLeftRadius: 30,
           borderTopRightRadius: 30,
@@ -130,7 +155,7 @@ function MainTabs() {
           fontSize: 10,
           fontWeight: '700',
         },
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIcon: ({ focused, color }) => {
           let iconName;
           if (route.name === 'Home') {
             iconName = focused ? 'home' : 'home-outline';

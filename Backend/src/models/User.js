@@ -49,7 +49,7 @@ const userSchema = new mongoose.Schema(
     },
     mood: {
       type: String,
-      default: 'Happy',
+      default: 'happy',
     },
     pushToken: {
       type: String,
@@ -63,7 +63,7 @@ const userSchema = new mongoose.Schema(
     },
     pendingAnimation: {
       type: String,
-      enum: ['love_you', 'miss_you', null],
+      enum: ['love_you', 'miss_you', 'heartbeat', null],
       default: null,
     },
   },

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, ActivityIndicator, Image, Platform, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, ActivityIndicator, Image, Platform } from 'react-native';
 import { Audio } from 'expo-av';
-import { SafeAreaView as RNSafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
-import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
+import { useThemeContext } from '../context/ThemeContext';
+import axiosInstance, { getMediaUrl } from '../api/axiosConfig';
 import Toast from 'react-native-toast-message';
 
 export default function ConversationScreen() {
@@ -14,6 +15,7 @@ export default function ConversationScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
   const { socket } = useSocket();
+  const { theme } = useThemeContext();
   const { partner } = route.params;
 
   const [messages, setMessages] = useState([]);
@@ -26,9 +28,12 @@ export default function ConversationScreen() {
 
   useEffect(() => {
     fetchMessages();
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (sound) {
-        sound.unloadAsync();
+        sound.unloadAsync().catch(() => {});
       }
     };
   }, [sound]);
@@ -63,8 +68,8 @@ export default function ConversationScreen() {
   const sendMessage = async (overrideData = null) => {
     if (!overrideData && inputText.trim() === '') return;
     
-    const textToSend = overrideData ? '' : inputText;
-    if (!overrideData) setInputText(''); // optimistic clear
+    const textToSend = overrideData ? '' : inputText.trim();
+    if (!overrideData) setInputText('');
     
     try {
       const payload = overrideData || { text: textToSend };
@@ -74,27 +79,31 @@ export default function ConversationScreen() {
       setMessages((prev) => [...prev, newMessage]);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
 
-      // Emit to socket room (the room is joining in SocketContext)
       if (socket && user?.partner) {
-        const room = [user._id, user.partner].sort().join('_');
+        const partnerId = typeof user.partner === 'object' ? user.partner._id : user.partner;
+        const room = [user._id, partnerId].sort().join('_');
         socket.emit('send_message', { room, message: newMessage });
       }
     } catch (error) {
       console.log('Error sending message:', error);
       Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to send message' });
-      if (!overrideData) setInputText(textToSend); // revert on failure
+      if (!overrideData) setInputText(textToSend);
     }
   };
 
   const startRecording = async () => {
     try {
-      await Audio.requestPermissionsAsync();
+      const perm = await Audio.requestPermissionsAsync();
+      if (!perm.granted) {
+        Toast.show({ type: 'error', text1: 'Permission Required', text2: 'Microphone access is needed for voice notes.' });
+        return;
+      }
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       });
-      const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      setRecording(recording);
+      const { recording: newRec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      setRecording(newRec);
       setIsRecording(true);
     } catch (err) {
       console.error('Failed to start recording', err);
@@ -104,62 +113,71 @@ export default function ConversationScreen() {
   const stopRecording = async () => {
     if (!recording) return;
     setIsRecording(false);
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
-    setRecording(null);
-
-    // Upload audio
-    if (uri) {
-      const ext = uri.split('.').pop() || 'm4a';
-      const formData = new FormData();
-      formData.append('media', {
-        uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
-        name: `voicenote.${ext}`,
-        type: `audio/${ext === 'm4a' ? 'mp4' : ext}`
+    try {
+      await recording.stopAndUnloadAsync();
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
       });
-      console.log('Sending voice note with formData:', formData);
-      try {
-        const uploadRes = await axiosInstance.post('/upload', formData, {
-          headers: { 
-            'Accept': 'application/json'
-          }
+      const uri = recording.getURI();
+      setRecording(null);
+
+      if (uri) {
+        const ext = uri.split('.').pop() || 'm4a';
+        const formData = new FormData();
+        formData.append('media', {
+          uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
+          name: `voicenote.${ext}`,
+          type: `audio/${ext === 'm4a' ? 'mp4' : ext}`
         });
-        console.log('Voice note uploaded successfully:', uploadRes.data);
+        const uploadRes = await axiosInstance.post('/upload', formData, {
+          headers: { 'Accept': 'application/json' }
+        });
         await sendMessage({ audioUrl: uploadRes.data.url });
-      } catch (err) {
-        console.error('Failed to upload audio', err);
-        Toast.show({ type: 'error', text1: 'Upload Failed', text2: 'Could not send voice note.' });
       }
+    } catch (err) {
+      console.error('Failed to upload audio', err);
+      setRecording(null);
+      Toast.show({ type: 'error', text1: 'Upload Failed', text2: 'Could not send voice note.' });
     }
   };
 
   const playAudio = async (url) => {
-    if (sound) await sound.unloadAsync();
     try {
-      const { sound: newSound } = await Audio.Sound.createAsync({ uri: `${STATIC_URL}${url}` });
+      if (sound) await sound.unloadAsync();
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+      const { sound: newSound } = await Audio.Sound.createAsync({ uri: getMediaUrl(url) });
       setSound(newSound);
       await newSound.playAsync();
     } catch (err) {
       console.error('Error playing audio', err);
+      Toast.show({ type: 'error', text1: 'Playback Error', text2: 'Could not play voice note.' });
     }
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
+      <View style={[styles.header, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <View style={styles.headerInfo}>
+        <TouchableOpacity
+          style={styles.headerInfo}
+          onPress={() => navigation.navigate('PartnerProfile')}
+          activeOpacity={0.8}
+        >
           <View style={[styles.avatarPlaceholder, { overflow: 'hidden' }]}>
-            {partner.avatar ? (
+            {partner?.avatar ? (
               <Image source={{ uri: getMediaUrl(partner.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
             ) : (
-              <Text style={styles.avatarLetter}>{partner.username.charAt(0).toUpperCase()}</Text>
+              <Text style={styles.avatarLetter}>{(partner?.username || 'P').charAt(0).toUpperCase()}</Text>
             )}
           </View>
-          <Text style={styles.title}>{partner.username}</Text>
-        </View>
+          <Text style={[styles.title, { color: theme.colors.text }]}>{partner?.fullName || partner?.username}</Text>
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView 
@@ -169,7 +187,7 @@ export default function ConversationScreen() {
       >
         {loading ? (
           <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color="#ff6b81" />
+            <ActivityIndicator size="large" color={theme.colors.primary} />
           </View>
         ) : (
           <FlatList
@@ -184,40 +202,53 @@ export default function ConversationScreen() {
             windowSize={5}
             onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
             renderItem={({ item }) => {
-              const isMe = item.sender === user._id;
+              const isMe = item.sender === user?._id;
               const date = new Date(item.createdAt);
               const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
               
               return (
                 <View style={[styles.messageBubbleWrapper, isMe ? styles.messageBubbleWrapperRight : styles.messageBubbleWrapperLeft]}>
-                  <View style={[styles.messageBubble, isMe ? styles.messageBubbleMe : styles.messageBubblePartner]}>
+                  <View
+                    style={[
+                      styles.messageBubble,
+                      isMe
+                        ? styles.messageBubbleMe
+                        : [styles.messageBubblePartner, { backgroundColor: theme.colors.inputBackground }]
+                    ]}
+                  >
                     {item.audioUrl ? (
                       <TouchableOpacity style={styles.audioBubble} onPress={() => playAudio(item.audioUrl)}>
-                        <Ionicons name="play-circle" size={24} color={isMe ? "#fff" : "#ff6b81"} />
-                        <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextPartner, { marginLeft: 8 }]}>
+                        <Ionicons name="play-circle" size={26} color={isMe ? "#fff" : "#ff6b81"} />
+                        <Text
+                          style={[
+                            styles.messageText,
+                            isMe ? styles.messageTextMe : { color: theme.colors.text },
+                            { marginLeft: 8, fontWeight: '600' }
+                          ]}
+                        >
                           Voice Note
                         </Text>
                       </TouchableOpacity>
                     ) : item.mediaUrl ? (
-                      <Image source={{ uri: `${STATIC_URL}${item.mediaUrl}` }} style={{ width: 200, height: 200, borderRadius: 10 }} />
+                      <Image source={{ uri: getMediaUrl(item.mediaUrl) }} style={{ width: 200, height: 200, borderRadius: 10 }} />
                     ) : (
-                      <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextPartner]}>
+                      <Text style={[styles.messageText, isMe ? styles.messageTextMe : { color: theme.colors.text }]}>
                         {item.text}
                       </Text>
                     )}
                   </View>
-                  <Text style={styles.timeText}>{timeString}</Text>
+                  <Text style={[styles.timeText, { color: theme.colors.textSecondary }]}>{timeString}</Text>
                 </View>
               );
             }}
           />
         )}
 
-        <View style={styles.inputContainer}>
+        <View style={[styles.inputContainer, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
           <TextInput
-            style={styles.textInput}
-            placeholder={isRecording ? "Recording..." : "Type a message..."}
-            placeholderTextColor="#aaa"
+            style={[styles.textInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text, borderColor: theme.colors.border }]}
+            placeholder={isRecording ? "Recording voice note... Release to send" : "Type a message..."}
+            placeholderTextColor={theme.colors.textSecondary}
             value={inputText}
             onChangeText={setInputText}
             multiline
@@ -250,7 +281,6 @@ export default function ConversationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
   },
   keyboardView: {
     flex: 1,
@@ -265,9 +295,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 15,
-    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   backButton: {
     padding: 5,
@@ -278,9 +306,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarPlaceholder: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#ff6b81',
     alignItems: 'center',
     justifyContent: 'center',
@@ -292,9 +320,8 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   title: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '700',
-    color: '#1a1a1a',
   },
   messageList: {
     paddingHorizontal: 20,
@@ -318,7 +345,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   messageBubblePartner: {
-    backgroundColor: '#f1f3f5',
     borderBottomLeftRadius: 4,
   },
   messageBubbleMe: {
@@ -335,15 +361,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 22,
   },
-  messageTextPartner: {
-    color: '#1a1a1a',
-  },
   messageTextMe: {
     color: '#ffffff',
   },
   timeText: {
     fontSize: 12,
-    color: '#888',
     marginHorizontal: 4,
   },
   inputContainer: {
@@ -351,22 +373,17 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: '#ffffff',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.03)',
   },
   textInput: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 12,
     maxHeight: 100,
     fontSize: 16,
-    color: '#1a1a1a',
     borderWidth: 1,
-    borderColor: '#eee',
   },
   sendButton: {
     width: 44,
@@ -383,9 +400,4 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
   },
-  sendButtonDisabled: {
-    backgroundColor: '#ffb3c1',
-    shadowOpacity: 0,
-    elevation: 0,
-  }
 });

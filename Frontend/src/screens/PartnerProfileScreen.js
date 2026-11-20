@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, TextInput, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Video } from 'expo-av';
 import { useAuth } from '../context/AuthContext';
 import { useThemeContext } from '../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
-import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
+import axiosInstance, { getMediaUrl } from '../api/axiosConfig';
 import Toast from 'react-native-toast-message';
 
 export default function PartnerProfileScreen() {
@@ -14,6 +15,7 @@ export default function PartnerProfileScreen() {
   const navigation = useNavigation();
   
   const [partner, setPartner] = useState(null);
+  const [loadingPartner, setLoadingPartner] = useState(true);
   const [posts, setPosts] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   
@@ -32,7 +34,11 @@ export default function PartnerProfileScreen() {
         setPartner(response.data);
       } catch (error) {
         console.log('Error fetching partner:', error);
+      } finally {
+        setLoadingPartner(false);
       }
+    } else {
+      setLoadingPartner(false);
     }
   };
 
@@ -55,17 +61,17 @@ export default function PartnerProfileScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchPosts();
+    await Promise.all([fetchPartner(), fetchPosts()]);
     setRefreshing(false);
   };
 
-  const handleLike = async (postId, currentLikes) => {
-    const userId = user._id;
+  const handleLike = async (postId, currentLikes = []) => {
+    const userId = user?._id;
     const isLiked = currentLikes.includes(userId);
     
     setPosts(posts.map(post => {
       if (post._id === postId) {
-        let newLikes = [...post.likes];
+        let newLikes = [...(post.likes || [])];
         if (isLiked) {
           newLikes = newLikes.filter(id => id !== userId);
         } else {
@@ -111,6 +117,40 @@ export default function PartnerProfileScreen() {
   const totalLikes = posts.reduce((sum, post) => sum + (post.likes?.length || 0), 0);
   const totalComments = posts.reduce((sum, post) => sum + (post.comments?.length || 0), 0);
 
+  const renderPostMedia = (item) => {
+    if (!item.mediaUrl || item.mediaType === 'none') return null;
+    const resolvedUrl = getMediaUrl(item.mediaUrl);
+
+    if (item.mediaType === 'image' || item.mediaType === 'drawing') {
+      return <Image source={{ uri: resolvedUrl }} style={styles.postImage} />;
+    }
+
+    if (item.mediaType === 'video') {
+      return (
+        <Video
+          source={{ uri: resolvedUrl }}
+          style={styles.postImage}
+          useNativeControls
+          resizeMode="contain"
+        />
+      );
+    }
+
+    if (item.mediaType === 'file') {
+      const fileName = item.mediaUrl.split('/').pop() || 'Attached Document';
+      return (
+        <TouchableOpacity
+          style={[styles.fileAttachmentBox, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]}
+          onPress={() => Linking.openURL(resolvedUrl).catch(() => {})}
+        >
+          <Ionicons name="document-text" size={26} color={theme.colors.primary} />
+          <Text style={[styles.fileAttachmentName, { color: theme.colors.text }]} numberOfLines={1}>{fileName}</Text>
+        </TouchableOpacity>
+      );
+    }
+    return null;
+  };
+
   const renderHeader = () => {
     if (!partner) return null;
     return (
@@ -119,8 +159,10 @@ export default function PartnerProfileScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
-          <Text style={[styles.topUsername, { color: theme.colors.text }]}>{partner.username || 'Partner'}</Text>
-          <View style={{ width: 24 }} />
+          <Text style={[styles.topUsername, { color: theme.colors.text }]}>@{partner.username || 'partner'}</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Conversation', { partner })} style={styles.backBtn}>
+            <Ionicons name="chatbubble-ellipses-outline" size={24} color={theme.colors.primary} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.infoSection}>
@@ -148,11 +190,15 @@ export default function PartnerProfileScreen() {
         </View>
 
         <View style={styles.bioSection}>
-          <Text style={[styles.name, { color: theme.colors.text }]}>{partner.username || 'Partner'}</Text>
+          <Text style={[styles.name, { color: theme.colors.text }]}>{partner.fullName || partner.username || 'Partner'}</Text>
           <Text style={[styles.email, { color: theme.colors.textSecondary }]}>{partner.email || ''}</Text>
-          <Text style={[styles.partnerText, { color: theme.colors.textSecondary }]}>
-            <Ionicons name="heart" size={14} color="#ff6b81" /> Paired with you
-          </Text>
+          {partner.bio ? (
+            <Text style={[styles.bioText, { color: theme.colors.text }]}>{partner.bio}</Text>
+          ) : null}
+          <View style={styles.partnerBadge}>
+            <Ionicons name="heart" size={14} color="#ff6b81" />
+            <Text style={styles.partnerBadgeText}>Paired with you</Text>
+          </View>
         </View>
       </View>
     );
@@ -160,7 +206,7 @@ export default function PartnerProfileScreen() {
 
   const renderPost = ({ item }) => {
     return (
-      <View style={[styles.postCard, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+      <View style={[styles.postCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
         <View style={styles.postHeader}>
           <View style={[styles.avatarPlaceholder, { overflow: 'hidden' }]}>
             {item.author?.avatar ? (
@@ -177,13 +223,11 @@ export default function PartnerProfileScreen() {
         
         {item.content ? <Text style={[styles.postText, { color: theme.colors.text }]}>{item.content}</Text> : null}
         
-        {item.mediaUrl && item.mediaType === 'image' && (
-          <Image source={{ uri: `${STATIC_URL}${item.mediaUrl}` }} style={styles.postImage} />
-        )}
+        {renderPostMedia(item)}
         
-        <View style={styles.postFooter}>
+        <View style={[styles.postFooter, { borderTopColor: theme.colors.border }]}>
           <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(item._id, item.likes)}>
-            <Ionicons name={item.likes?.includes(user._id) ? "heart" : "heart-outline"} size={24} color={item.likes?.includes(user._id) ? "#ff6b81" : theme.colors.textSecondary} />
+            <Ionicons name={item.likes?.includes(user?._id) ? "heart" : "heart-outline"} size={24} color={item.likes?.includes(user?._id) ? "#ff6b81" : theme.colors.textSecondary} />
             <Text style={[styles.actionText, { color: theme.colors.textSecondary }]}>{item.likes?.length || 0}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton} onPress={() => { setActiveCommentPostId(activeCommentPostId === item._id ? null : item._id); setCommentText(''); }}>
@@ -193,9 +237,9 @@ export default function PartnerProfileScreen() {
         </View>
 
         {activeCommentPostId === item._id && (
-          <View style={styles.commentSection}>
+          <View style={[styles.commentSection, { borderTopColor: theme.colors.border }]}>
             {item.comments?.map((comment, index) => (
-              <View key={index} style={styles.commentItem}>
+              <View key={index} style={[styles.commentItem, { backgroundColor: theme.colors.inputBackground }]}>
                 <Text style={[styles.commentAuthor, { color: theme.colors.text }]}>{comment.user?.username || 'User'}</Text>
                 <Text style={[styles.commentText, { color: theme.colors.textSecondary }]}>{comment.text}</Text>
               </View>
@@ -230,7 +274,11 @@ export default function PartnerProfileScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      {partner ? (
+      {loadingPartner ? (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      ) : partner ? (
         <FlatList
           data={posts}
           keyExtractor={(item) => item._id}
@@ -238,7 +286,7 @@ export default function PartnerProfileScreen() {
           renderItem={renderPost}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="images-outline" size={60} color={theme.colors.textSecondary} />
@@ -248,6 +296,9 @@ export default function PartnerProfileScreen() {
         />
       ) : (
         <View style={styles.emptyContainer}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginBottom: 20 }}>
+            <Ionicons name="arrow-back" size={28} color={theme.colors.text} />
+          </TouchableOpacity>
           <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>Partner data not found.</Text>
         </View>
       )}
@@ -258,16 +309,14 @@ export default function PartnerProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
   },
   listContent: {
     paddingBottom: 40,
   },
   profileHeader: {
-    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f1f1',
-    paddingBottom: 15,
+    paddingBottom: 18,
+    marginBottom: 12,
   },
   topBar: {
     flexDirection: 'row',
@@ -283,7 +332,6 @@ const styles = StyleSheet.create({
   topUsername: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#1a1a1a',
   },
   infoSection: {
     flexDirection: 'row',
@@ -292,16 +340,18 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
     backgroundColor: '#ff9ff3',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 30,
+    marginRight: 26,
+    borderWidth: 2,
+    borderColor: '#ff9ff3',
   },
   avatarText: {
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: 'bold',
     color: '#ffffff',
   },
@@ -314,46 +364,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#1a1a1a',
   },
   statLabel: {
     fontSize: 13,
-    color: '#1a1a1a',
+    marginTop: 2,
   },
   bioSection: {
     paddingHorizontal: 20,
   },
   name: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: 'bold',
-    color: '#1a1a1a',
     marginBottom: 2,
   },
   email: {
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 4,
+    fontSize: 13,
+    marginBottom: 6,
   },
-  partnerText: {
+  bioText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#555',
+    lineHeight: 20,
+    marginBottom: 10,
+  },
+  partnerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 107, 129, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 129, 0.3)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+  },
+  partnerBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ff6b81',
   },
   postCard: {
-    backgroundColor: '#ffffff',
     borderRadius: 20,
     padding: 20,
     marginBottom: 16,
     marginHorizontal: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.06,
     shadowRadius: 5,
-    elevation: 3,
+    elevation: 2,
   },
   postHeader: { 
     flexDirection: 'row', 
@@ -389,15 +451,29 @@ const styles = StyleSheet.create({
   },
   postImage: {
     width: '100%',
-    height: 200,
+    height: 220,
     borderRadius: 12,
-    marginBottom: 12
+    marginBottom: 12,
+    backgroundColor: '#000',
+  },
+  fileAttachmentBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+    gap: 10,
+  },
+  fileAttachmentName: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
   },
   postFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#f1f1f1',
     paddingTop: 12,
   },
   actionButton: {
@@ -413,11 +489,9 @@ const styles = StyleSheet.create({
   commentSection: {
     marginTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#f1f1f1',
     paddingTop: 12,
   },
   commentItem: {
-    backgroundColor: '#f8f9fa',
     padding: 10,
     borderRadius: 12,
     marginBottom: 8,
@@ -425,12 +499,10 @@ const styles = StyleSheet.create({
   commentAuthor: {
     fontWeight: 'bold',
     fontSize: 13,
-    color: '#1a1a1a',
     marginBottom: 2,
   },
   commentText: {
     fontSize: 14,
-    color: '#444',
   },
   commentInputContainer: {
     flexDirection: 'row',
@@ -439,7 +511,6 @@ const styles = StyleSheet.create({
   },
   commentInput: {
     flex: 1,
-    backgroundColor: '#f1f3f5',
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingTop: 10,
@@ -447,7 +518,6 @@ const styles = StyleSheet.create({
     minHeight: 40,
     maxHeight: 100,
     fontSize: 14,
-    color: '#333',
   },
   sendCommentBtn: {
     backgroundColor: '#ff6b81',
@@ -466,6 +536,5 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 18,
     fontWeight: '600',
-    color: '#ccc',
   }
 });

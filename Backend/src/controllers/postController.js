@@ -1,8 +1,7 @@
 const Post = require('../models/Post');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
-const { Expo } = require('expo-server-sdk');
-const expo = new Expo();
+const { sendPushNotification } = require('../utils/pushNotification');
 
 // @desc    Create a new post
 // @route   POST /api/posts
@@ -11,23 +10,21 @@ const createPost = async (req, res) => {
   try {
     const { content, mediaUrl, mediaType } = req.body;
     
-    if (!content && !mediaUrl) {
+    if ((!content || !String(content).trim()) && !mediaUrl) {
       return res.status(400).json({ message: 'Post must contain text or media' });
     }
 
     const post = await Post.create({
       author: req.user._id,
-      content,
-      mediaUrl,
+      content: content ? String(content).trim() : '',
+      mediaUrl: mediaUrl || '',
       mediaType: mediaType || 'none'
     });
 
-    // Populate author so frontend can show username/avatar instantly
-    await post.populate('author', 'username avatar');
+    await post.populate('author', 'fullName username avatar');
 
     // Send Push Notification to partner
     if (req.user.partner) {
-      // Save notification to DB
       let notifTitle = 'New Memory Added! 💖';
       let notifMessage = `${req.user.username} just posted a new memory.`;
       let notifType = mediaType === 'image' || mediaType === 'video' ? 'gallery' : 'post';
@@ -49,19 +46,11 @@ const createPost = async (req, res) => {
 
       try {
         const partnerUser = await User.findById(req.user.partner);
-        if (partnerUser && partnerUser.pushToken && Expo.isExpoPushToken(partnerUser.pushToken)) {
-          const messages = [{
-            to: partnerUser.pushToken,
-            sound: 'default',
-            title: notifTitle,
-            body: notifMessage,
-            data: { postId: post._id, type: notifType },
-          }];
-          
-          const chunks = expo.chunkPushNotifications(messages);
-          for (const chunk of chunks) {
-            await expo.sendPushNotificationsAsync(chunk);
-          }
+        if (partnerUser && partnerUser.pushToken) {
+          await sendPushNotification(partnerUser.pushToken, notifTitle, notifMessage, {
+            postId: post._id,
+            type: notifType
+          });
         }
       } catch (pushError) {
         console.error('Error sending push notification:', pushError);
@@ -81,10 +70,9 @@ const createPost = async (req, res) => {
 const getFeed = async (req, res, next) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 10;
+    const limit = parseInt(req.query.limit, 10) || 25;
     const startIndex = (page - 1) * limit;
     
-    // Filter by date if provided (e.g., ?date=today)
     const query = { author: { $in: req.allowedAuthors } };
     if (req.query.date === 'today') {
       const today = new Date();
@@ -94,13 +82,12 @@ const getFeed = async (req, res, next) => {
       query.createdAt = { $gte: today, $lt: tomorrow };
     }
 
-    // req.allowedAuthors is injected by pairMiddleware
     const posts = await Post.find(query)
       .sort({ createdAt: -1 })
       .skip(startIndex)
       .limit(limit)
-      .populate('author', 'username avatar')
-      .populate('comments.user', 'username avatar');
+      .populate('author', 'fullName username avatar')
+      .populate('comments.user', 'fullName username avatar');
       
     res.status(200).json(posts);
   } catch (error) {
@@ -119,13 +106,13 @@ const getGallery = async (req, res, next) => {
 
     const mediaPosts = await Post.find({
       author: { $in: req.allowedAuthors },
-      mediaType: { $in: ['image', 'video'] }
+      mediaType: { $in: ['image', 'video', 'drawing'] }
     })
-    .sort({ createdAt: -1 })
-    .skip(startIndex)
-    .limit(limit)
-    .select('mediaUrl mediaType createdAt author')
-    .populate('author', 'username');
+      .sort({ createdAt: -1 })
+      .skip(startIndex)
+      .limit(limit)
+      .select('mediaUrl mediaType createdAt author content')
+      .populate('author', 'fullName username avatar');
 
     res.status(200).json(mediaPosts);
   } catch (error) {
@@ -144,28 +131,38 @@ const toggleLike = async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    // Ensure the post belongs to the pair
     if (!req.allowedAuthors.map(id => id.toString()).includes(post.author.toString())) {
       return res.status(403).json({ message: 'Not authorized to like this post' });
     }
 
-    const isLiked = post.likes.includes(req.user._id);
+    const isLiked = post.likes.some(id => id.toString() === req.user._id.toString());
 
     if (isLiked) {
       post.likes = post.likes.filter(id => id.toString() !== req.user._id.toString());
     } else {
       post.likes.push(req.user._id);
 
-      // Create notification for like if the liker is not the author
       if (post.author.toString() !== req.user._id.toString()) {
-        await Notification.create({
+        const existingNotif = await Notification.findOne({
           recipient: post.author,
           sender: req.user._id,
-          title: 'New Like! ❤️',
-          message: `${req.user.username} liked your post.`,
           type: 'like',
           referenceId: post._id
         });
+        if (!existingNotif) {
+          await Notification.create({
+            recipient: post.author,
+            sender: req.user._id,
+            title: 'New Like! ❤️',
+            message: `${req.user.username} liked your post.`,
+            type: 'like',
+            referenceId: post._id
+          });
+          const partnerUser = await User.findById(post.author);
+          if (partnerUser && partnerUser.pushToken) {
+            sendPushNotification(partnerUser.pushToken, 'New Like! ❤️', `${req.user.username} liked your post.`).catch(() => {});
+          }
+        }
       }
     }
 
@@ -184,7 +181,7 @@ const addComment = async (req, res) => {
   try {
     const { text } = req.body;
     
-    if (!text) {
+    if (!text || !String(text).trim()) {
       return res.status(400).json({ message: 'Comment text is required' });
     }
 
@@ -194,33 +191,33 @@ const addComment = async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    // Ensure the post belongs to the pair
     if (!req.allowedAuthors.map(id => id.toString()).includes(post.author.toString())) {
       return res.status(403).json({ message: 'Not authorized to comment on this post' });
     }
 
-    const newComment = {
+    const trimmedText = String(text).trim();
+    post.comments.push({
       user: req.user._id,
-      text
-    };
-
-    post.comments.push(newComment);
+      text: trimmedText
+    });
     await post.save();
 
-    // Create notification for comment if the commenter is not the author
     if (post.author.toString() !== req.user._id.toString()) {
       await Notification.create({
         recipient: post.author,
         sender: req.user._id,
         title: 'New Comment! 💬',
-        message: `${req.user.username} commented: "${text}"`,
+        message: `${req.user.username} commented: "${trimmedText}"`,
         type: 'comment',
         referenceId: post._id
       });
+      const partnerUser = await User.findById(post.author);
+      if (partnerUser && partnerUser.pushToken) {
+        sendPushNotification(partnerUser.pushToken, 'New Comment! 💬', `${req.user.username} commented: "${trimmedText}"`).catch(() => {});
+      }
     }
 
-    // Re-fetch post and populate to return the full comment details
-    const populatedPost = await Post.findById(req.params.id).populate('comments.user', 'username avatar');
+    const populatedPost = await Post.findById(req.params.id).populate('comments.user', 'fullName username avatar');
     
     res.status(201).json(populatedPost.comments);
   } catch (error) {
@@ -240,7 +237,6 @@ const deletePost = async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    // Ensure the current user is the author of the post
     if (post.author.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Not authorized to delete this post' });
     }
@@ -264,19 +260,22 @@ const updatePost = async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    // Check if the user is the author
     if (post.author.toString() !== req.user._id.toString()) {
       return res.status(401).json({ message: 'User not authorized to update this post' });
     }
 
     const { content } = req.body;
-    post.content = content !== undefined ? content : post.content;
+    const trimmedContent = content !== undefined ? String(content).trim() : post.content;
+
+    if (!trimmedContent && !post.mediaUrl) {
+      return res.status(400).json({ message: 'Post cannot be empty' });
+    }
+
+    post.content = trimmedContent;
 
     const updatedPost = await post.save();
-    
-    // Populate the author data before returning
-    await updatedPost.populate('author', 'username avatar');
-    await updatedPost.populate('comments.user', 'username avatar');
+    await updatedPost.populate('author', 'fullName username avatar');
+    await updatedPost.populate('comments.user', 'fullName username avatar');
 
     res.json(updatedPost);
   } catch (error) {

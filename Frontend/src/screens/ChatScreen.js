@@ -5,10 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import axiosInstance, { STATIC_URL, getMediaUrl } from '../api/axiosConfig';
+import { useThemeContext } from '../context/ThemeContext';
+import axiosInstance, { getMediaUrl } from '../api/axiosConfig';
 
 export default function ChatScreen() {
   const { user } = useAuth();
+  const { theme } = useThemeContext();
   const navigation = useNavigation();
   const [partner, setPartner] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -16,6 +18,7 @@ export default function ChatScreen() {
   useEffect(() => {
     const fetchPartner = async () => {
       if (!user?.partner) {
+        setPartner(null);
         setLoading(false);
         return;
       }
@@ -29,7 +32,6 @@ export default function ChatScreen() {
       }
     };
     
-    // Refresh partner info when screen is focused
     const unsubscribe = navigation.addListener('focus', () => {
       fetchPartner();
     });
@@ -40,23 +42,25 @@ export default function ChatScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#ff6b81" />
+      <SafeAreaView style={[styles.centerContainer, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Chats</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
+      <View style={[styles.header, { backgroundColor: theme.colors.background }]}>
+        <Text style={[styles.title, { color: theme.colors.text }]}>Chats</Text>
       </View>
 
       {!user?.partner || !partner ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>👻</Text>
-          <Text style={styles.emptyText}>No Partner Connected</Text>
-          <Text style={styles.emptySubtext}>You need to pair with a partner to start chatting.</Text>
+          <Text style={[styles.emptyText, { color: theme.colors.text }]}>No Partner Connected</Text>
+          <Text style={[styles.emptySubtext, { color: theme.colors.textSecondary }]}>
+            You need to pair with a partner to start chatting.
+          </Text>
           
           <TouchableOpacity 
             style={styles.pairButton}
@@ -69,22 +73,22 @@ export default function ChatScreen() {
         <View style={styles.listContainer}>
           <Animated.View entering={FadeInUp.delay(100)} layout={Layout.springify()}>
             <TouchableOpacity 
-              style={styles.chatCard}
-            activeOpacity={0.7}
-            onPress={() => navigation.navigate('Conversation', { partner })}
-          >
-            <View style={[styles.avatarPlaceholder, { overflow: 'hidden' }]}>
-              {partner.avatar ? (
-                <Image source={{ uri: getMediaUrl(partner.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
-              ) : (
-                <Text style={styles.avatarLetter}>{partner.username.charAt(0).toUpperCase()}</Text>
-              )}
-            </View>
-            <View style={styles.chatInfo}>
-              <Text style={styles.chatName}>{partner.username}</Text>
-              <Text style={styles.chatPreview}>Tap to open chat</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
+              style={[styles.chatCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('Conversation', { partner })}
+            >
+              <View style={[styles.avatarPlaceholder, { overflow: 'hidden' }]}>
+                {partner.avatar ? (
+                  <Image source={{ uri: getMediaUrl(partner.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
+                ) : (
+                  <Text style={styles.avatarLetter}>{(partner.username || 'P').charAt(0).toUpperCase()}</Text>
+                )}
+              </View>
+              <View style={styles.chatInfo}>
+                <Text style={[styles.chatName, { color: theme.colors.text }]}>{partner.fullName || partner.username}</Text>
+                <Text style={[styles.chatPreview, { color: theme.colors.textSecondary }]}>Tap to open chat & voice notes</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
             </TouchableOpacity>
           </Animated.View>
         </View>
@@ -96,24 +100,20 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fcfcfc',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fcfcfc',
   },
   header: {
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 15,
-    backgroundColor: '#fcfcfc',
   },
   title: {
     fontSize: 34,
     fontWeight: '800',
-    color: '#1a1a1a',
   },
   emptyContainer: {
     flex: 1,
@@ -129,12 +129,10 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#1a1a1a',
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 16,
-    color: '#888',
     textAlign: 'center',
     marginBottom: 30,
   },
@@ -161,11 +159,9 @@ const styles = StyleSheet.create({
   chatCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
     padding: 16,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
@@ -192,11 +188,9 @@ const styles = StyleSheet.create({
   chatName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1a1a1a',
     marginBottom: 4,
   },
   chatPreview: {
     fontSize: 14,
-    color: '#888',
   }
 });

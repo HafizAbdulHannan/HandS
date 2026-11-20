@@ -1,4 +1,5 @@
 const WatchRoom = require('../models/WatchRoom');
+const mongoose = require('mongoose');
 const crypto = require('crypto');
 
 // @desc    Create a new watch room
@@ -7,18 +8,31 @@ const crypto = require('crypto');
 exports.createRoom = async (req, res) => {
   try {
     const { roomName } = req.body;
-    if (!roomName) {
+    if (!roomName || !String(roomName).trim()) {
       return res.status(400).json({ message: 'Room name is required' });
     }
 
-    const roomCode = crypto.randomBytes(3).toString('hex').toUpperCase();
+    let roomCode;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = crypto.randomBytes(3).toString('hex').toUpperCase();
+      const existing = await WatchRoom.findOne({ roomCode: candidate });
+      if (!existing) {
+        roomCode = candidate;
+        break;
+      }
+    }
+    if (!roomCode) {
+      roomCode = crypto.randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
+    }
 
     const room = await WatchRoom.create({
       roomCode,
-      roomName,
+      roomName: String(roomName).trim(),
       host: req.user._id,
       participants: [req.user._id]
     });
+
+    await room.populate('host participants', 'fullName username email avatar');
 
     res.status(201).json({
       success: true,
@@ -36,19 +50,22 @@ exports.createRoom = async (req, res) => {
 exports.joinRoom = async (req, res) => {
   try {
     const { roomCode } = req.body;
-    if (!roomCode) {
+    if (!roomCode || !String(roomCode).trim()) {
       return res.status(400).json({ message: 'Room code is required' });
     }
 
-    const room = await WatchRoom.findOne({ roomCode });
+    const normalizedCode = String(roomCode).trim().toUpperCase();
+    const room = await WatchRoom.findOne({ roomCode: normalizedCode });
     if (!room) {
       return res.status(404).json({ message: 'Room not found' });
     }
 
-    if (!room.participants.includes(req.user._id)) {
+    if (!room.participants.some(id => id.toString() === req.user._id.toString())) {
       room.participants.push(req.user._id);
       await room.save();
     }
+
+    await room.populate('host participants', 'fullName username email avatar');
 
     res.status(200).json({
       success: true,
@@ -60,12 +77,21 @@ exports.joinRoom = async (req, res) => {
   }
 };
 
-// @desc    Get room details
+// @desc    Get room details (by ObjectId or roomCode)
 // @route   GET /api/watch/:roomId
 // @access  Private
 exports.getRoom = async (req, res) => {
   try {
-    const room = await WatchRoom.findById(req.params.roomId).populate('host participants', 'fullName username email avatar');
+    const param = String(req.params.roomId || '').trim();
+    let room = null;
+
+    if (mongoose.Types.ObjectId.isValid(param)) {
+      room = await WatchRoom.findById(param).populate('host participants', 'fullName username email avatar');
+    }
+    if (!room && param && param !== 'undefined') {
+      room = await WatchRoom.findOne({ roomCode: param.toUpperCase() }).populate('host participants', 'fullName username email avatar');
+    }
+
     if (!room) {
       return res.status(404).json({ message: 'Room not found' });
     }
@@ -85,7 +111,15 @@ exports.getRoom = async (req, res) => {
 // @access  Private
 exports.deleteRoom = async (req, res) => {
   try {
-    const room = await WatchRoom.findById(req.params.roomId);
+    const param = String(req.params.roomId || '').trim();
+    let room = null;
+    if (mongoose.Types.ObjectId.isValid(param)) {
+      room = await WatchRoom.findById(param);
+    }
+    if (!room && param) {
+      room = await WatchRoom.findOne({ roomCode: param.toUpperCase() });
+    }
+
     if (!room) {
       return res.status(404).json({ message: 'Room not found' });
     }
@@ -94,7 +128,7 @@ exports.deleteRoom = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to delete this room' });
     }
 
-    await WatchRoom.findByIdAndDelete(req.params.roomId);
+    await WatchRoom.findByIdAndDelete(room._id);
 
     res.status(200).json({
       success: true,

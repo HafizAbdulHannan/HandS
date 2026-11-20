@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { 
   View, StyleSheet, TouchableOpacity, Text, 
-  PanResponder, Dimensions, Image, ActivityIndicator, TextInput, Platform, Alert 
+  Dimensions, Image, ActivityIndicator, TextInput, Platform, Alert 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -11,11 +11,11 @@ import { useThemeContext } from '../context/ThemeContext';
 import Svg, { Path, Rect, Circle, Polygon } from 'react-native-svg';
 import ViewShot from 'react-native-view-shot';
 import * as ImagePicker from 'expo-image-picker';
-import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
-import * as SecureStore from 'expo-secure-store';
+import axiosInstance from '../api/axiosConfig';
 import Toast from 'react-native-toast-message';
-import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
+import Animated, { SlideInDown } from 'react-native-reanimated';
 import DraggableItem from '../components/DraggableItem';
+
 const { width, height } = Dimensions.get('window');
 const COLORS = ['#FF3B30', '#FF9500', '#FFCC00', '#4CD964', '#5AC8FA', '#007AFF', '#5856D6', '#FFFFFF', '#000000'];
 const STROKES = [2, 5, 10, 20];
@@ -38,7 +38,7 @@ export default function DrawFunScreen() {
   const [redoElements, setRedoElements] = useState([]);
   
   const [showTools, setShowTools] = useState(false);
-  const [toolMode, setToolMode] = useState('draw'); // 'draw', 'move', 'color', 'stroke', 'sticker', 'shape', 'text'
+  const [toolMode, setToolMode] = useState('draw');
   const [isPosting, setIsPosting] = useState(false);
   const [textInput, setTextInput] = useState('');
 
@@ -47,26 +47,13 @@ export default function DrawFunScreen() {
     toolModeRef.current = toolMode;
   }, [toolMode]);
 
-  const handleUndo = () => {
-    if (paths.length > 0) {
-      const newPaths = [...paths];
-      const undone = newPaths.pop();
-      setPaths(newPaths);
-      setRedoPaths([...redoPaths, undone]);
-    } else if (placedElements.length > 0) {
-      const newElements = [...placedElements];
-      const undone = newElements.pop();
-      setPlacedElements(newElements);
-      setRedoElements([...redoElements, undone]);
-    }
-  };
-
   const handleTouchStart = (evt) => {
     if (toolModeRef.current !== 'draw' && toolModeRef.current !== 'eraser') return;
     const { locationX, locationY } = evt.nativeEvent;
     setCurrentPath({
       path: `M${locationX},${locationY}`,
-      color: toolModeRef.current === 'eraser' ? theme.colors.background : color,
+      // Canvas background is white (#ffffff), so eraser must draw white
+      color: toolModeRef.current === 'eraser' ? '#ffffff' : color,
       strokeWidth
     });
   };
@@ -83,7 +70,7 @@ export default function DrawFunScreen() {
   const handleTouchEnd = () => {
     if (currentPath) {
       setPaths([...paths, currentPath]);
-      setRedoPaths([]); // Clear redo stack on new action
+      setRedoPaths([]);
       setCurrentPath(null);
     }
   };
@@ -166,7 +153,6 @@ export default function DrawFunScreen() {
     try {
       let uri = await viewShotRef.current.capture();
       
-      // Ensure Android URI has file:// prefix
       if (Platform.OS === 'android' && !uri.startsWith('file://') && !uri.startsWith('content://')) {
         uri = `file://${uri}`;
       }
@@ -178,11 +164,7 @@ export default function DrawFunScreen() {
         type: 'image/jpeg'
       });
 
-      const uploadRes = await axiosInstance.post('/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
+      const uploadRes = await axiosInstance.post('/upload', formData);
       const finalUrl = uploadRes.data.url;
 
       await axiosInstance.post('/posts', {
@@ -206,65 +188,65 @@ export default function DrawFunScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
         {/* Header */}
-      <View style={[styles.header, { zIndex: 10 }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
-            <Ionicons name="close" size={28} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleUndo} style={styles.iconBtn}>
-            <Ionicons name="arrow-undo" size={28} color="#fff" />
+        <View style={[styles.header, { zIndex: 10 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
+              <Ionicons name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={undo} style={styles.iconBtn}>
+              <Ionicons name="arrow-undo" size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity onPress={handlePost} style={styles.postBtn} disabled={isPosting}>
+            {isPosting ? <ActivityIndicator color="#fff" /> : <Text style={styles.postText}>Post</Text>}
           </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={handlePost} style={styles.postBtn} disabled={isPosting}>
-          {isPosting ? <ActivityIndicator color="#fff" /> : <Text style={styles.postText}>Post</Text>}
-        </TouchableOpacity>
-      </View>
 
-      {/* Canvas */}
-      <View style={styles.canvasContainer}>
-        <ViewShot ref={viewShotRef} style={styles.viewShot} options={{ format: 'jpg', quality: 0.8, result: 'tmpfile' }}>
-          <View collapsable={false} style={styles.canvasBackground}>
-            {bgImage && <Image source={{ uri: bgImage }} style={StyleSheet.absoluteFill} resizeMode="cover" />}
-            
-            <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-              {paths.map((p, i) => (
-                <Path key={i} d={p.path} stroke={p.color} strokeWidth={p.strokeWidth} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-              ))}
-              {currentPath && (
-                <Path d={currentPath.path} stroke={currentPath.color} strokeWidth={currentPath.strokeWidth} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-              )}
-            </Svg>
+        {/* Canvas */}
+        <View style={styles.canvasContainer}>
+          <ViewShot ref={viewShotRef} style={styles.viewShot} options={{ format: 'jpg', quality: 0.85, result: 'tmpfile' }}>
+            <View collapsable={false} style={styles.canvasBackground}>
+              {bgImage && <Image source={{ uri: bgImage }} style={StyleSheet.absoluteFill} resizeMode="cover" />}
+              
+              <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+                {paths.map((p, i) => (
+                  <Path key={i} d={p.path} stroke={p.color} strokeWidth={p.strokeWidth} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                ))}
+                {currentPath && (
+                  <Path d={currentPath.path} stroke={currentPath.color} strokeWidth={currentPath.strokeWidth} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                )}
+              </Svg>
 
-            {placedElements.map((el, i) => {
-              if (el.type === 'sticker') {
-                return (
-                  <DraggableItem key={i} initialX={el.x} initialY={el.y}>
-                    <Text style={{ fontSize: 50 }}>{el.content}</Text>
-                  </DraggableItem>
-                );
-              }
-              if (el.type === 'text') {
-                return (
-                  <DraggableItem key={i} initialX={el.x} initialY={el.y}>
-                    <Text style={{ fontSize: 24, fontWeight: 'bold', color: el.color }}>{el.content}</Text>
-                  </DraggableItem>
-                );
-              }
-              if (el.type === 'shape') {
-                return (
-                  <DraggableItem key={i} initialX={el.x} initialY={el.y}>
-                    <Svg height="100" width="100">
-                      {el.shape === 'rect' && <Rect width="100" height="100" fill={el.color} />}
-                      {el.shape === 'circle' && <Circle cx="50" cy="50" r="50" fill={el.color} />}
-                      {el.shape === 'triangle' && <Polygon points="50,0 100,100 0,100" fill={el.color} />}
-                      {el.shape === 'star' && <Polygon points="50,0 60,35 100,35 70,60 80,100 50,75 20,100 30,60 0,35 40,35" fill={el.color} />}
-                      {el.shape === 'heart' && <Path d="M50,90 L42,82 C14,56 0,42 0,25 C0,11 11,0 25,0 C33,0 40,4 45,10 C50,4 57,0 65,0 C79,0 90,11 90,25 C90,42 76,56 48,82 L50,90 Z" fill={el.color} transform="translate(5, 5)" />}
-                    </Svg>
-                  </DraggableItem>
-                );
-              }
-              return null;
-            })}
+              {placedElements.map((el, i) => {
+                if (el.type === 'sticker') {
+                  return (
+                    <DraggableItem key={i} initialX={el.x} initialY={el.y}>
+                      <Text style={{ fontSize: 50 }}>{el.content}</Text>
+                    </DraggableItem>
+                  );
+                }
+                if (el.type === 'text') {
+                  return (
+                    <DraggableItem key={i} initialX={el.x} initialY={el.y}>
+                      <Text style={{ fontSize: 24, fontWeight: 'bold', color: el.color }}>{el.content}</Text>
+                    </DraggableItem>
+                  );
+                }
+                if (el.type === 'shape') {
+                  return (
+                    <DraggableItem key={i} initialX={el.x} initialY={el.y}>
+                      <Svg height="100" width="100">
+                        {el.shape === 'rect' && <Rect width="100" height="100" fill={el.color} />}
+                        {el.shape === 'circle' && <Circle cx="50" cy="50" r="50" fill={el.color} />}
+                        {el.shape === 'triangle' && <Polygon points="50,0 100,100 0,100" fill={el.color} />}
+                        {el.shape === 'star' && <Polygon points="50,0 60,35 100,35 70,60 80,100 50,75 20,100 30,60 0,35 40,35" fill={el.color} />}
+                        {el.shape === 'heart' && <Path d="M50,90 L42,82 C14,56 0,42 0,25 C0,11 11,0 25,0 C33,0 40,4 45,10 C50,4 57,0 65,0 C79,0 90,11 90,25 C90,42 76,56 48,82 L50,90 Z" fill={el.color} transform="translate(5, 5)" />}
+                      </Svg>
+                    </DraggableItem>
+                  );
+                }
+                return null;
+              })}
 
               <View 
                 pointerEvents={(toolMode === 'draw' || toolMode === 'eraser') ? 'auto' : 'none'}
@@ -275,127 +257,128 @@ export default function DrawFunScreen() {
                 onResponderRelease={handleTouchEnd}
                 collapsable={false}
               />
-          </View>
-        </ViewShot>
-      </View>
+            </View>
+          </ViewShot>
+        </View>
 
-      {/* Toolbar */}
-      <View style={[styles.toolbar, { backgroundColor: theme.colors.card }]}>
-        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('color'); setShowTools(true); }}>
-          <View style={[styles.colorPreview, { backgroundColor: color }]} />
-        </TouchableOpacity>
+        {/* Toolbar */}
+        <View style={[styles.toolbar, { backgroundColor: theme.colors.card, borderTopColor: theme.colors.border }]}>
+          <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('color'); setShowTools(true); }}>
+            <View style={[styles.colorPreview, { backgroundColor: color, borderColor: theme.colors.text }]} />
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('stroke'); setShowTools(true); }}>
-          <Ionicons name="pencil" size={24} color={theme.colors.text} />
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('stroke'); setShowTools(true); }}>
+            <Ionicons name="pencil" size={24} color={toolMode === 'draw' ? theme.colors.primary : theme.colors.text} />
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('sticker'); setShowTools(true); }}>
-          <Ionicons name="happy-outline" size={24} color={theme.colors.text} />
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('sticker'); setShowTools(true); }}>
+            <Ionicons name="happy-outline" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('text'); setShowTools(true); }}>
-          <Ionicons name="text-outline" size={24} color={theme.colors.text} />
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('shape'); setShowTools(true); }}>
-          <Ionicons name="shapes-outline" size={24} color={theme.colors.text} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.toolBtn} onPress={() => {
-          setColor('#ffffff');
-          setStrokeWidth(20);
-          setToolMode('eraser');
-          Toast.show({ type: 'info', text1: 'Eraser active', text2: 'Draw to erase (white color)' });
-        }}>
-          <Ionicons name="scan-outline" size={24} color={toolMode === 'eraser' ? theme.colors.primary : theme.colors.text} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.toolBtn} onPress={clearCanvas}>
-          <Ionicons name="trash-outline" size={24} color={theme.colors.text} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.toolBtn} onPress={pickImage}>
-          <Ionicons name="image-outline" size={24} color={theme.colors.text} />
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.toolBtn} onPress={undo}>
-          <Ionicons name="arrow-undo-outline" size={24} color={theme.colors.text} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.toolBtn} onPress={redo}>
-          <Ionicons name="arrow-redo-outline" size={24} color={theme.colors.text} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Tools Panel */}
-      {showTools && (
-        <Animated.View entering={SlideInDown} style={[styles.toolsPanel, { backgroundColor: theme.colors.cardBg, shadowColor: theme.colors.text }]}>
-          <View style={styles.toolsPanelHeader}>
-            <Text style={{ color: theme.colors.text, fontWeight: 'bold' }}>
-              {toolMode === 'color' && 'Select Color'}
-              {toolMode === 'stroke' && 'Pen Thickness'}
-              {toolMode === 'sticker' && 'Add Sticker'}
-              {toolMode === 'shape' && 'Add Shape'}
-            </Text>
-            <TouchableOpacity onPress={() => { setShowTools(false); setToolMode('draw'); }}>
-              <Ionicons name="close-circle" size={24} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('text'); setShowTools(true); }}>
+            <Ionicons name="text-outline" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
           
-          <View style={styles.toolsContent}>
-            {toolMode === 'color' && COLORS.map(c => (
-              <TouchableOpacity key={c} onPress={() => { setColor(c); setShowTools(false); setToolMode('draw'); }} style={[styles.colorCircle, { backgroundColor: c, borderWidth: color === c ? 3 : 0, borderColor: theme.colors.text }]} />
-            ))}
+          <TouchableOpacity style={styles.toolBtn} onPress={() => { setToolMode('shape'); setShowTools(true); }}>
+            <Ionicons name="shapes-outline" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
 
-            {toolMode === 'stroke' && STROKES.map(s => (
-              <TouchableOpacity key={s} onPress={() => { setStrokeWidth(s); setShowTools(false); setToolMode('draw'); }} style={styles.strokeBtn}>
-                <View style={{ width: 40, height: s, backgroundColor: theme.colors.text, borderRadius: s/2 }} />
+          <TouchableOpacity style={styles.toolBtn} onPress={() => {
+            setStrokeWidth(20);
+            setToolMode('eraser');
+            Toast.show({ type: 'info', text1: 'Eraser active', text2: 'Draw on canvas to erase' });
+          }}>
+            <Ionicons name="scan-outline" size={24} color={toolMode === 'eraser' ? theme.colors.primary : theme.colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toolBtn} onPress={clearCanvas}>
+            <Ionicons name="trash-outline" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toolBtn} onPress={pickImage}>
+            <Ionicons name="image-outline" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.toolBtn} onPress={undo}>
+            <Ionicons name="arrow-undo-outline" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.toolBtn} onPress={redo}>
+            <Ionicons name="arrow-redo-outline" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Tools Panel */}
+        {showTools && (
+          <Animated.View entering={SlideInDown} style={[styles.toolsPanel, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1, shadowColor: theme.colors.text }]}>
+            <View style={styles.toolsPanelHeader}>
+              <Text style={{ color: theme.colors.text, fontWeight: 'bold' }}>
+                {toolMode === 'color' && 'Select Color'}
+                {toolMode === 'stroke' && 'Pen Thickness'}
+                {toolMode === 'sticker' && 'Add Sticker'}
+                {toolMode === 'shape' && 'Add Shape'}
+                {toolMode === 'text' && 'Add Text'}
+              </Text>
+              <TouchableOpacity onPress={() => { setShowTools(false); setToolMode('draw'); }}>
+                <Ionicons name="close-circle" size={24} color={theme.colors.textSecondary} />
               </TouchableOpacity>
-            ))}
+            </View>
+            
+            <View style={styles.toolsContent}>
+              {toolMode === 'color' && COLORS.map(c => (
+                <TouchableOpacity key={c} onPress={() => { setColor(c); setShowTools(false); setToolMode('draw'); }} style={[styles.colorCircle, { backgroundColor: c, borderWidth: color === c ? 3 : 1, borderColor: theme.colors.text }]} />
+              ))}
 
-            {toolMode === 'sticker' && STICKERS.map(s => (
-              <TouchableOpacity key={s} onPress={() => addSticker(s)} style={styles.stickerBtn}>
-                <Text style={{ fontSize: 32 }}>{s}</Text>
-              </TouchableOpacity>
-            ))}
+              {toolMode === 'stroke' && STROKES.map(s => (
+                <TouchableOpacity key={s} onPress={() => { setStrokeWidth(s); setShowTools(false); setToolMode('draw'); }} style={styles.strokeBtn}>
+                  <View style={{ width: 40, height: s, backgroundColor: theme.colors.text, borderRadius: s/2 }} />
+                </TouchableOpacity>
+              ))}
 
-            {toolMode === 'text' && (
-              <View style={{ width: '100%', paddingHorizontal: 20 }}>
-                <TextInput
-                  style={[styles.textInputStyle, { borderColor: theme.colors.border, color: theme.colors.text }]}
-                  placeholder="Enter text..."
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={textInput}
-                  onChangeText={setTextInput}
-                  autoFocus
-                />
-                <TouchableOpacity onPress={addText} style={[styles.addTextBtn, { backgroundColor: theme.colors.primary }]}>
-                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>Add Text</Text>
+              {toolMode === 'sticker' && STICKERS.map(s => (
+                <TouchableOpacity key={s} onPress={() => addSticker(s)} style={styles.stickerBtn}>
+                  <Text style={{ fontSize: 32 }}>{s}</Text>
                 </TouchableOpacity>
-              </View>
-            )}
+              ))}
 
-            {toolMode === 'shape' && (
-              <>
-                <TouchableOpacity onPress={() => addShape('rect')} style={styles.shapeBtn}>
-                  <View style={{ width: 40, height: 40, backgroundColor: color }} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => addShape('circle')} style={styles.shapeBtn}>
-                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: color }} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => addShape('triangle')} style={styles.shapeBtn}>
-                  <Svg height="40" width="40"><Polygon points="20,0 40,40 0,40" fill={color} /></Svg>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => addShape('star')} style={styles.shapeBtn}>
-                  <Svg height="40" width="40"><Polygon points="20,0 24,14 40,14 28,24 32,40 20,30 8,40 12,24 0,14 16,14" fill={color} /></Svg>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => addShape('heart')} style={styles.shapeBtn}>
-                  <Svg height="40" width="40"><Path d="M20,36 L17,33 C6,22 0,17 0,10 C0,4 4,0 10,0 C13,0 16,2 18,4 C20,2 23,0 26,0 C32,0 36,4 36,10 C36,17 30,22 19,33 L20,36 Z" fill={color} transform="translate(2, 2)" /></Svg>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </Animated.View>
-      )}
+              {toolMode === 'text' && (
+                <View style={{ width: '100%', paddingHorizontal: 20 }}>
+                  <TextInput
+                    style={[styles.textInputStyle, { borderColor: theme.colors.border, color: theme.colors.text, backgroundColor: theme.colors.inputBackground }]}
+                    placeholder="Enter text..."
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={textInput}
+                    onChangeText={setTextInput}
+                    autoFocus
+                  />
+                  <TouchableOpacity onPress={addText} style={[styles.addTextBtn, { backgroundColor: theme.colors.primary }]}>
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Add Text</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {toolMode === 'shape' && (
+                <>
+                  <TouchableOpacity onPress={() => addShape('rect')} style={styles.shapeBtn}>
+                    <View style={{ width: 40, height: 40, backgroundColor: color }} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => addShape('circle')} style={styles.shapeBtn}>
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: color }} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => addShape('triangle')} style={styles.shapeBtn}>
+                    <Svg height="40" width="40"><Polygon points="20,0 40,40 0,40" fill={color} /></Svg>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => addShape('star')} style={styles.shapeBtn}>
+                    <Svg height="40" width="40"><Polygon points="20,0 24,14 40,14 28,24 32,40 20,30 8,40 12,24 0,14 16,14" fill={color} /></Svg>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => addShape('heart')} style={styles.shapeBtn}>
+                    <Svg height="40" width="40"><Path d="M20,36 L17,33 C6,22 0,17 0,10 C0,4 4,0 10,0 C13,0 16,2 18,4 C20,2 23,0 26,0 C32,0 36,4 36,10 C36,17 30,22 19,33 L20,36 Z" fill={color} transform="translate(2, 2)" /></Svg>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </Animated.View>
+        )}
       </SafeAreaView>
     </GestureHandlerRootView>
   );
@@ -459,7 +442,6 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#333'
   },
   toolsPanel: {
     position: 'absolute',

@@ -5,7 +5,8 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
-import axiosInstance, { STATIC_URL } from '../api/axiosConfig';
+import axiosInstance, { getMediaUrl } from '../api/axiosConfig';
+import { useThemeContext } from '../context/ThemeContext';
 
 export default function FeedbackScreen() {
   const [feedbackText, setFeedbackText] = useState('');
@@ -15,6 +16,7 @@ export default function FeedbackScreen() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const navigation = useNavigation();
+  const { theme } = useThemeContext();
 
   useEffect(() => {
     fetchFeedbacks();
@@ -51,8 +53,8 @@ export default function FeedbackScreen() {
     setSubmitting(true);
     try {
       const formData = new FormData();
-      formData.append('rating', rating);
-      if (feedbackText) formData.append('text', feedbackText);
+      formData.append('rating', String(rating));
+      if (feedbackText.trim()) formData.append('text', feedbackText.trim());
       if (image) {
         formData.append('media', {
           uri: Platform.OS === 'ios' ? image.uri.replace('file://', '') : image.uri,
@@ -61,9 +63,7 @@ export default function FeedbackScreen() {
         });
       }
 
-      await axiosInstance.post('/feedbacks', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      await axiosInstance.post('/feedbacks', formData);
 
       Toast.show({ type: 'success', text1: 'Thank You!', text2: 'Your feedback was submitted.' });
       setFeedbackText('');
@@ -79,18 +79,18 @@ export default function FeedbackScreen() {
   };
 
   const renderFeedbackItem = ({ item }) => (
-    <View style={styles.feedbackItem}>
+    <View style={[styles.feedbackItem, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
       <View style={styles.fbHeader}>
-        <Text style={styles.fbUser}>{item.user?.username || 'Anonymous'}</Text>
+        <Text style={[styles.fbUser, { color: theme.colors.text }]}>{item.user?.username || 'Anonymous'}</Text>
         <View style={styles.starsContainerSm}>
           {[1,2,3,4,5].map(i => (
             <Ionicons key={i} name={i <= item.rating ? "star" : "star-outline"} size={14} color="#FFD700" />
           ))}
         </View>
       </View>
-      {item.text ? <Text style={styles.fbText}>{item.text}</Text> : null}
+      {item.text ? <Text style={[styles.fbText, { color: theme.colors.textSecondary }]}>{item.text}</Text> : null}
       {item.imageUrl ? (
-        <Image source={{ uri: `${STATIC_URL}${item.imageUrl}` }} style={styles.fbImage} />
+        <Image source={{ uri: getMediaUrl(item.imageUrl) }} style={styles.fbImage} />
       ) : null}
       {item.devReply ? (
         <View style={styles.devReplyContainer}>
@@ -102,7 +102,7 @@ export default function FeedbackScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
       <KeyboardAvoidingView 
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -110,9 +110,9 @@ export default function FeedbackScreen() {
       >
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Feedback</Text>
+          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Feedback</Text>
           <View style={{ width: 44 }} />
         </View>
 
@@ -124,7 +124,7 @@ export default function FeedbackScreen() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
             <View style={styles.formContainer}>
-              <Text style={styles.title}>We value your input</Text>
+              <Text style={[styles.title, { color: theme.colors.text }]}>We value your input</Text>
               
               <View style={styles.ratingContainer}>
                 {[1,2,3,4,5].map(star => (
@@ -135,11 +135,11 @@ export default function FeedbackScreen() {
               </View>
 
               <TextInput
-                style={styles.textInput}
+                style={[styles.textInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border, color: theme.colors.text }]}
                 multiline
                 numberOfLines={4}
                 placeholder="Share your thoughts..."
-                placeholderTextColor="#aaa"
+                placeholderTextColor={theme.colors.textSecondary}
                 value={feedbackText}
                 onChangeText={setFeedbackText}
                 textAlignVertical="top"
@@ -160,7 +160,8 @@ export default function FeedbackScreen() {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.sectionTitle}>Recent Feedback</Text>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Recent Feedback</Text>
+              {loading && <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 10 }} />}
             </View>
           }
         />
@@ -170,40 +171,40 @@ export default function FeedbackScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
+  container: { flex: 1 },
   keyboardView: { flex: 1 },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 10, marginBottom: 10,
   },
   backButton: { width: 44, height: 44, justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
+  headerTitle: { fontSize: 18, fontWeight: '700' },
   listContent: { paddingHorizontal: 20, paddingBottom: 40 },
   formContainer: { marginBottom: 30 },
-  title: { fontSize: 24, fontWeight: '800', color: '#1a1a1a', marginBottom: 20, textAlign: 'center' },
+  title: { fontSize: 24, fontWeight: '800', marginBottom: 20, textAlign: 'center' },
   ratingContainer: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 20 },
   textInput: {
-    backgroundColor: '#fafafa', borderWidth: 1, borderColor: '#eee',
-    borderRadius: 16, padding: 15, fontSize: 16, color: '#333', minHeight: 120, marginBottom: 15
+    borderWidth: 1,
+    borderRadius: 16, padding: 15, fontSize: 16, minHeight: 120, marginBottom: 15
   },
   formRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  imageBtn: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 12, backgroundColor: '#fff0f3' },
+  imageBtn: { flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 12, backgroundColor: 'rgba(255, 107, 129, 0.14)' },
   imageBtnText: { color: '#ff6b81', fontWeight: 'bold', marginLeft: 8 },
   button: { backgroundColor: '#ff6b81', paddingHorizontal: 30, paddingVertical: 14, borderRadius: 20 },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
   sectionTitle: { fontSize: 20, fontWeight: 'bold', marginTop: 40, marginBottom: 15 },
   feedbackItem: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 15, marginBottom: 15,
-    borderWidth: 1, borderColor: '#eee',
+    borderRadius: 16, padding: 15, marginBottom: 15,
+    borderWidth: 1,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2
   },
   fbHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   fbUser: { fontWeight: 'bold', fontSize: 16 },
   starsContainerSm: { flexDirection: 'row', gap: 2 },
-  fbText: { fontSize: 15, color: '#444', marginBottom: 10 },
+  fbText: { fontSize: 15, marginBottom: 10 },
   fbImage: { width: '100%', height: 150, borderRadius: 10, marginBottom: 10, resizeMode: 'cover' },
-  devReplyContainer: { backgroundColor: '#f0fdf4', padding: 10, borderRadius: 10, marginTop: 5 },
-  devReplyTitle: { fontWeight: 'bold', color: '#166534', fontSize: 13, marginBottom: 4 },
+  devReplyContainer: { backgroundColor: 'rgba(34, 197, 94, 0.14)', padding: 10, borderRadius: 10, marginTop: 5 },
+  devReplyTitle: { fontWeight: 'bold', color: '#16a34a', fontSize: 13, marginBottom: 4 },
   devReplyText: { color: '#15803d', fontSize: 14 }
 });

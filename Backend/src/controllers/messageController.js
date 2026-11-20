@@ -8,6 +8,10 @@ const getMessages = async (req, res) => {
     const userId = req.user._id;
     const partnerId = req.user.partner;
 
+    if (!partnerId) {
+      return res.status(200).json([]);
+    }
+
     const messages = await Message.find({
       $or: [
         { sender: userId, receiver: partnerId },
@@ -33,10 +37,18 @@ const sendMessage = async (req, res) => {
     const userId = req.user._id;
     const partnerId = req.user.partner;
 
+    if (!partnerId) {
+      return res.status(400).json({ message: 'You must connect with a partner before sending messages' });
+    }
+
     if (req.file) {
       const filePath = `/uploads/${req.file.filename}`;
-      // Basic check: if the field name was media, check mimetype or assume it is what the client sent.
-      if (req.file.mimetype.startsWith('audio') || req.file.mimetype.includes('mp4') || req.body.type === 'audio') {
+      const isAudioFile =
+        req.file.mimetype.startsWith('audio') ||
+        /\.(m4a|mp3|wav|aac|ogg)$/i.test(req.file.originalname) ||
+        req.body.type === 'audio';
+
+      if (isAudioFile) {
         audioUrl = filePath;
       } else {
         mediaUrl = filePath;

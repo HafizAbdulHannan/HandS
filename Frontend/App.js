@@ -11,7 +11,6 @@ import { AuthProvider } from './src/context/AuthContext';
 import { ThemeProvider, useThemeContext } from './src/context/ThemeContext';
 import Toast from 'react-native-toast-message';
 import * as TaskManager from 'expo-task-manager';
-import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axiosInstance from './src/api/axiosConfig';
 
