@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -74,43 +74,46 @@ export default function SharedListScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <View style={[styles.inputContainer, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
-        <TextInput
-          style={[styles.input, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
-          placeholder="Add an item..."
-          placeholderTextColor={theme.colors.textSecondary}
-          value={newItemText}
-          onChangeText={setNewItemText}
-          onSubmitEditing={handleAddItem}
-        />
-        <TouchableOpacity style={styles.addBtn} onPress={handleAddItem} disabled={isAdding || !newItemText.trim()}>
-          {isAdding ? <ActivityIndicator color="#fff" /> : <Ionicons name="add" size={24} color="#fff" />}
-        </TouchableOpacity>
-      </View>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={[styles.inputContainer, { backgroundColor: theme.colors.card, borderBottomColor: theme.colors.border }]}>
+          <TextInput
+            style={[styles.input, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
+            placeholder="Add an item..."
+            placeholderTextColor={theme.colors.textSecondary}
+            value={newItemText}
+            onChangeText={setNewItemText}
+            onSubmitEditing={handleAddItem}
+          />
+          <TouchableOpacity style={styles.addBtn} onPress={handleAddItem} disabled={isAdding || !newItemText.trim()}>
+            {isAdding ? <ActivityIndicator color="#fff" /> : <Ionicons name="add" size={24} color="#fff" />}
+          </TouchableOpacity>
+        </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#ff6b81" style={{ marginTop: 20 }} />
-      ) : (
-        <FlatList
-          data={items}
-          keyExtractor={item => item._id}
-          contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <View style={[styles.itemCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <TouchableOpacity style={styles.checkBtn} onPress={() => handleToggle(item._id)}>
-                <Ionicons name={item.completed ? "checkmark-circle" : "ellipse-outline"} size={28} color={item.completed ? "#4CD964" : theme.colors.textSecondary} />
-              </TouchableOpacity>
-              <Text style={[styles.itemText, { color: theme.colors.text }, item.completed && { textDecorationLine: 'line-through', color: theme.colors.textSecondary }]}>
-                {item.text}
-              </Text>
-              <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item._id)}>
-                <Ionicons name="trash-outline" size={20} color="#ff6b81" />
-              </TouchableOpacity>
-            </View>
-          )}
-          ListEmptyComponent={<Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>Your shared list is empty.</Text>}
-        />
-      )}
+        {loading ? (
+          <ActivityIndicator size="large" color="#ff6b81" style={{ marginTop: 20 }} />
+        ) : (
+          <FlatList
+            data={items}
+            keyExtractor={item => item._id}
+            contentContainerStyle={[styles.listContent, { paddingBottom: 50 }]}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <View style={[styles.itemCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+                <TouchableOpacity style={styles.checkBtn} onPress={() => handleToggle(item._id)}>
+                  <Ionicons name={item.completed ? "checkmark-circle" : "ellipse-outline"} size={28} color={item.completed ? "#4CD964" : theme.colors.textSecondary} />
+                </TouchableOpacity>
+                <Text style={[styles.itemText, { color: theme.colors.text }, item.completed && { textDecorationLine: 'line-through', color: theme.colors.textSecondary }]}>
+                  {item.text}
+                </Text>
+                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item._id)}>
+                  <Ionicons name="trash-outline" size={20} color="#ff6b81" />
+                </TouchableOpacity>
+              </View>
+            )}
+            ListEmptyComponent={<Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>Your shared list is empty.</Text>}
+          />
+        )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

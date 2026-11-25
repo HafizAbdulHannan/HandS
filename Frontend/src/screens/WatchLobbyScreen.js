@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  Alert, 
-  ActivityIndicator, 
-  StyleSheet, 
-  KeyboardAvoidingView, 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  StyleSheet,
+  KeyboardAvoidingView,
   Platform,
   ScrollView
 } from 'react-native';
@@ -33,14 +33,14 @@ const WatchLobbyScreen = () => {
         Alert.alert('Error', 'Please enter a room name');
         return;
       }
-      
+
       setLoadingModalVisible(true);
       setLoadingPhaseText('Plz wait room is creating...');
       setLoadingProgress(30);
-      
+
       const response = await axiosInstance.post('/watch/create', { roomName: roomName.trim() });
       const room = response?.data?.room;
-      
+
       if (!room || !room.roomCode || !room._id) {
         throw new Error('Invalid room data received from server');
       }
@@ -122,12 +122,12 @@ const WatchLobbyScreen = () => {
         <View style={styles.headerRight} />
       </View>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, { paddingBottom: 60 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -137,7 +137,7 @@ const WatchLobbyScreen = () => {
               <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Create a Room</Text>
             </View>
             <Text style={[styles.cardSubtitle, { color: theme.colors.textSecondary }]}>Host a new watch party with your partner.</Text>
-            
+
             <TextInput
               style={[styles.input, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text, borderColor: theme.colors.border }]}
               placeholder="Enter Room Name (e.g. Movie Night)"
@@ -145,8 +145,8 @@ const WatchLobbyScreen = () => {
               value={roomName}
               onChangeText={setRoomName}
             />
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={[styles.button, { backgroundColor: theme.colors.primary }]}
               onPress={handleCreateRoom}
               disabled={loadingModalVisible}
@@ -167,7 +167,7 @@ const WatchLobbyScreen = () => {
               <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Join a Room</Text>
             </View>
             <Text style={[styles.cardSubtitle, { color: theme.colors.textSecondary }]}>Enter the 6-character code shared by your partner.</Text>
-            
+
             <TextInput
               style={[styles.input, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text, borderColor: theme.colors.border }]}
               placeholder="Enter 6-Digit Room Code"
@@ -177,8 +177,8 @@ const WatchLobbyScreen = () => {
               autoCapitalize="characters"
               maxLength={6}
             />
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={[styles.button, { backgroundColor: '#45aaf2' }]}
               onPress={handleJoinRoom}
               disabled={loadingModalVisible}
@@ -195,7 +195,7 @@ const WatchLobbyScreen = () => {
           <View style={[styles.loadingBox, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginBottom: 16 }} />
             <Text style={[styles.loadingText, { color: theme.colors.text }]}>{loadingPhaseText}</Text>
-            
+
             <View style={styles.progressBarBg}>
               <View style={[styles.progressBarFill, { width: `${loadingProgress}%`, backgroundColor: theme.colors.primary }]} />
             </View>

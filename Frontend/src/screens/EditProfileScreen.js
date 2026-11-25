@@ -95,179 +95,179 @@ export default function EditProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
-          <Text style={[styles.cancelText, { color: theme.colors.text }]}>Cancel</Text>
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Edit profile</Text>
-        <TouchableOpacity onPress={handleSave} style={styles.headerBtn} disabled={isSaving}>
-          {isSaving ? (
-            <ActivityIndicator size="small" color="#ff6b81" />
-          ) : (
-            <Text style={styles.doneText}>Done</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
+        <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+            <Text style={[styles.cancelText, { color: theme.colors.text }]}>Cancel</Text>
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Edit profile</Text>
+          <TouchableOpacity onPress={handleSave} style={styles.headerBtn} disabled={isSaving}>
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#ff6b81" />
+            ) : (
+              <Text style={styles.doneText}>Done</Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.avatarSection}>
-            <TouchableOpacity onPress={handlePickImage} style={styles.avatarWrapper}>
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Ionicons name="person" size={50} color="#fff" />
-                </View>
-              )}
-            </TouchableOpacity>
-            
-            <View style={styles.avatarActions}>
-              <TouchableOpacity onPress={handlePickImage}>
-                <Text style={styles.changePhotoText}>Edit picture</Text>
-              </TouchableOpacity>
-              {avatarUri && (
-                <TouchableOpacity onPress={handleRemoveImage} style={styles.removePhotoBtn}>
-                  <Text style={styles.removePhotoText}>Remove</Text>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <View style={styles.avatarSection}>
+                <TouchableOpacity onPress={handlePickImage} style={styles.avatarWrapper}>
+                  {avatarUri ? (
+                    <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                  ) : (
+                    <View style={styles.avatarPlaceholder}>
+                      <Ionicons name="person" size={50} color="#fff" />
+                    </View>
+                  )}
                 </TouchableOpacity>
-              )}
-            </View>
-          </View>
 
-          <View style={styles.formSection}>
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Name</Text>
-              <TextInput
-                style={[styles.input, { color: theme.colors.text, borderBottomColor: theme.colors.border }]}
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder="Name"
-                placeholderTextColor={theme.colors.textSecondary}
-              />
-            </View>
+                <View style={styles.avatarActions}>
+                  <TouchableOpacity onPress={handlePickImage}>
+                    <Text style={styles.changePhotoText}>Edit picture</Text>
+                  </TouchableOpacity>
+                  {avatarUri && (
+                    <TouchableOpacity onPress={handleRemoveImage} style={styles.removePhotoBtn}>
+                      <Text style={styles.removePhotoText}>Remove</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Username</Text>
-              <TextInput
-                style={[styles.input, { color: theme.colors.text, borderBottomColor: theme.colors.border }]}
-                value={username}
-                onChangeText={setUsername}
-                placeholder="Username"
-                autoCapitalize="none"
-                placeholderTextColor={theme.colors.textSecondary}
-              />
-            </View>
+              <View style={styles.formSection}>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Name</Text>
+                  <TextInput
+                    style={[styles.input, { color: theme.colors.text, borderBottomColor: theme.colors.border }]}
+                    value={fullName}
+                    onChangeText={setFullName}
+                    placeholder="Name"
+                    placeholderTextColor={theme.colors.textSecondary}
+                  />
+                </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Bio</Text>
-              <TextInput
-                style={[styles.input, { color: theme.colors.text, borderBottomColor: theme.colors.border }]}
-                value={bio}
-                onChangeText={setBio}
-                placeholder="Bio"
-                placeholderTextColor={theme.colors.textSecondary}
-                multiline
-                maxLength={150}
-              />
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Username</Text>
+                  <TextInput
+                    style={[styles.input, { color: theme.colors.text, borderBottomColor: theme.colors.border }]}
+                    value={username}
+                    onChangeText={setUsername}
+                    placeholder="Username"
+                    autoCapitalize="none"
+                    placeholderTextColor={theme.colors.textSecondary}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Bio</Text>
+                  <TextInput
+                    style={[styles.input, { color: theme.colors.text, borderBottomColor: theme.colors.border }]}
+                    value={bio}
+                    onChangeText={setBio}
+                    placeholder="Bio"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    multiline
+                    maxLength={150}
+                  />
+                </View>
+              </View>
+            </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+      );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+      const styles = StyleSheet.create({
+        container: {
+        flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+      header: {
+        flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
   },
-  headerBtn: {
-    padding: 8,
-    minWidth: 60,
+      headerBtn: {
+        padding: 8,
+      minWidth: 60,
   },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
+      headerTitle: {
+        fontSize: 16,
+      fontWeight: 'bold',
   },
-  cancelText: {
-    fontSize: 16,
+      cancelText: {
+        fontSize: 16,
   },
-  doneText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ff6b81',
-    textAlign: 'right',
+      doneText: {
+        fontSize: 16,
+      fontWeight: 'bold',
+      color: '#ff6b81',
+      textAlign: 'right',
   },
-  scrollContent: {
-    padding: 20,
+      scrollContent: {
+        padding: 20,
   },
-  avatarSection: {
-    alignItems: 'center',
-    marginBottom: 30,
+      avatarSection: {
+        alignItems: 'center',
+      marginBottom: 30,
   },
-  avatarWrapper: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    overflow: 'hidden',
-    backgroundColor: '#ddd',
-    marginBottom: 12,
+      avatarWrapper: {
+        width: 100,
+      height: 100,
+      borderRadius: 50,
+      overflow: 'hidden',
+      backgroundColor: '#ddd',
+      marginBottom: 12,
   },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+      avatarImage: {
+        width: '100%',
+      height: '100%',
+      resizeMode: 'cover',
   },
-  avatarPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#ff6b81',
-    justifyContent: 'center',
-    alignItems: 'center',
+      avatarPlaceholder: {
+        width: '100%',
+      height: '100%',
+      backgroundColor: '#ff6b81',
+      justifyContent: 'center',
+      alignItems: 'center',
   },
-  avatarActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+      avatarActions: {
+        flexDirection: 'row',
+      alignItems: 'center',
+      gap: 16,
   },
-  changePhotoText: {
-    color: '#3498db',
-    fontWeight: '600',
-    fontSize: 15,
+      changePhotoText: {
+        color: '#3498db',
+      fontWeight: '600',
+      fontSize: 15,
   },
-  removePhotoBtn: {
-    borderLeftWidth: 1,
-    borderLeftColor: '#ddd',
-    paddingLeft: 16,
+      removePhotoBtn: {
+        borderLeftWidth: 1,
+      borderLeftColor: '#ddd',
+      paddingLeft: 16,
   },
-  removePhotoText: {
-    color: '#e74c3c',
-    fontWeight: '600',
-    fontSize: 15,
+      removePhotoText: {
+        color: '#e74c3c',
+      fontWeight: '600',
+      fontSize: 15,
   },
-  formSection: {
-    marginTop: 10,
+      formSection: {
+        marginTop: 10,
   },
-  inputGroup: {
-    marginBottom: 20,
+      inputGroup: {
+        marginBottom: 20,
   },
-  label: {
-    fontSize: 13,
-    marginBottom: 8,
-    fontWeight: '500',
+      label: {
+        fontSize: 13,
+      marginBottom: 8,
+      fontWeight: '500',
   },
-  input: {
-    fontSize: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
+      input: {
+        fontSize: 16,
+      paddingVertical: 8,
+      borderBottomWidth: 1,
   }
 });

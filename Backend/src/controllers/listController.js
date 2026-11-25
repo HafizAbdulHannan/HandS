@@ -23,7 +23,7 @@ const addItem = async (req, res) => {
     if (!text || !String(text).trim()) {
       return res.status(400).json({ message: 'Text is required' });
     }
-    
+
     const pair = getPairKey(req.user);
     const item = await SharedListItem.create({
       pair,
@@ -45,7 +45,7 @@ const toggleItem = async (req, res) => {
     if (item.pair !== pair) {
       return res.status(403).json({ message: 'Not authorized to modify this item' });
     }
-    
+
     item.completed = !item.completed;
     await item.save();
     res.status(200).json(item);

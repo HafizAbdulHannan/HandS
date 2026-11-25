@@ -1,5 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, ActivityIndicator, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ScrollView,
+  DeviceEventEmitter,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -21,7 +35,7 @@ export default function DatesToRememberScreen() {
   const [dates, setDates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
-  
+
   // Form states
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(new Date());
@@ -29,7 +43,7 @@ export default function DatesToRememberScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedAudio, setSelectedAudio] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   // Audio playback state
   const [sound, setSound] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -37,50 +51,16 @@ export default function DatesToRememberScreen() {
 
   useEffect(() => {
     fetchDates();
-    
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-      const { customSoundUrl, dateId } = response.notification?.request?.content?.data || {};
-      if (customSoundUrl) {
-        playSound(customSoundUrl, dateId);
-      }
-      
-      if (dateId) {
-        setTimeout(() => {
-          Alert.alert(
-            "Reminder", 
-            "Would you like to keep this reminder or delete it?",
-            [
-              { text: "Keep", style: "cancel" },
-              { 
-                 text: "Delete", 
-                 style: "destructive",
-                 onPress: async () => {
-                   try {
-                     await axiosInstance.delete(`/dates/${dateId}`);
-                     fetchDates();
-                     Toast.show({ type: 'success', text1: 'Deleted', text2: 'Date deleted' });
-                   } catch (e) {}
-                 }
-              }
-            ]
-          );
-        }, 1000);
-      }
-    });
-
+    const refreshSub = DeviceEventEmitter.addListener('dates_updated', fetchDates);
     return () => {
-      if (responseListener) {
-        try {
-          responseListener.remove();
-        } catch (e) {}
-      }
+      refreshSub.remove();
     };
   }, []);
 
   useEffect(() => {
     return () => {
       if (sound) {
-        sound.unloadAsync().catch(() => {});
+        sound.unloadAsync().catch(() => { });
       }
     };
   }, [sound]);
@@ -130,7 +110,7 @@ export default function DatesToRememberScreen() {
       if (selectedAudio) {
         let fileUri = selectedAudio.uri;
         const ext = (selectedAudio.name || 'mp3').split('.').pop() || 'mp3';
-        
+
         if (Platform.OS === 'android' && fileUri.startsWith('content://')) {
           const tempUri = `${FileSystem.cacheDirectory}temp_audio_${Date.now()}.${ext}`;
           await FileSystem.copyAsync({ from: fileUri, to: tempUri });
@@ -143,7 +123,7 @@ export default function DatesToRememberScreen() {
         formData.append('media', {
           uri: fileUri,
           name: selectedAudio.name || `reminder.${ext}`,
-          type: selectedAudio.type || 'audio/mpeg'
+          type: selectedAudio.type || 'audio/mpeg',
         });
 
         const uploadRes = await axiosInstance.post('/upload', formData);
@@ -153,19 +133,27 @@ export default function DatesToRememberScreen() {
       const response = await axiosInstance.post('/dates', {
         title: title.trim(),
         date,
-        customSoundUrl: audioUrl
+        customSoundUrl: audioUrl,
       });
-      
+
       const savedDate = response.data;
-      
+
       try {
         const targetDate = new Date(date);
         if (targetDate.getTime() > Date.now()) {
           await Notifications.scheduleNotificationAsync({
             content: {
-              title: "Date Reminder! ❤️",
+              title: 'Date Reminder! ❤️',
               body: `It's time for: ${title.trim()}`,
-              data: { customSoundUrl: audioUrl, dateId: savedDate._id || savedDate.id },
+              sound: audioUrl ? false : true,
+              ...(Platform.OS === 'android' ? { channelId: 'date_reminders' } : {}),
+              data: {
+                type: 'date_reminder',
+                customSoundUrl: audioUrl,
+                dateId: savedDate._id || savedDate.id,
+                title: title.trim(),
+                date: targetDate.toISOString(),
+              },
             },
             trigger: {
               type: Notifications.SchedulableTriggerInputTypes?.DATE || 'date',
@@ -177,7 +165,14 @@ export default function DatesToRememberScreen() {
         console.log('Notification schedule failed', e);
       }
 
-      Toast.show({ type: 'success', text1: 'Success', text2: 'Date saved successfully!' });
+      DeviceEventEmitter.emit('dates_updated');
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: audioUrl
+          ? 'Date saved! Reminder audio will play automatically at the scheduled time.'
+          : 'Date saved successfully!',
+      });
       setModalVisible(false);
       resetForm();
       fetchDates();
@@ -198,102 +193,114 @@ export default function DatesToRememberScreen() {
         onPress: async () => {
           try {
             await axiosInstance.delete(`/dates/${id}`);
-            setDates(dates.filter(d => d._id !== id));
+            setDates((prev) => prev.filter((d) => d._id !== id));
+            DeviceEventEmitter.emit('dates_updated');
             Toast.show({ type: 'success', text1: 'Deleted', text2: 'Date deleted' });
           } catch (error) {
             console.log('Error deleting date:', error);
             Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to delete date' });
           }
-        }
-      }
+        },
+},
     ]);
   };
 
-  const resetForm = () => {
-    setTitle('');
-    setDate(new Date());
-    setSelectedAudio(null);
-  };
+const resetForm = () => {
+  setTitle('');
+  setDate(new Date());
+  setSelectedAudio(null);
+};
 
-  const playSound = async (audioUrl, id) => {
-    if (!audioUrl) return;
+const playSound = async (audioUrl, id) => {
+  if (!audioUrl) return;
 
-    if (isPlaying && playingId === id) {
-      await sound?.pauseAsync();
-      setIsPlaying(false);
-      setPlayingId(null);
-      return;
+  if (isPlaying && playingId === id) {
+    await sound?.pauseAsync();
+    setIsPlaying(false);
+    setPlayingId(null);
+    return;
+  }
+
+  try {
+    if (sound) {
+      await sound.unloadAsync();
     }
 
-    try {
-      if (sound) {
-        await sound.unloadAsync();
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      playThroughEarpieceAndroid: false,
+    });
+
+    const { sound: newSound } = await Audio.Sound.createAsync(
+      { uri: getMediaUrl(audioUrl) },
+      { shouldPlay: true }
+    );
+
+    setSound(newSound);
+    setIsPlaying(true);
+    setPlayingId(id);
+
+    newSound.setOnPlaybackStatusUpdate((status) => {
+      if (status.didJustFinish) {
+        setIsPlaying(false);
+        setPlayingId(null);
+        newSound.unloadAsync();
       }
+    });
+  } catch (error) {
+    console.log('Error playing sound:', error);
+    Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to play sound' });
+  }
+};
 
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: getMediaUrl(audioUrl) },
-        { shouldPlay: true }
-      );
-      
-      setSound(newSound);
-      setIsPlaying(true);
-      setPlayingId(id);
+const formatDateTime = (dateString) => {
+  const options = { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+  return new Date(dateString).toLocaleString(undefined, options);
+};
 
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.didJustFinish) {
-          setIsPlaying(false);
-          setPlayingId(null);
-          newSound.unloadAsync();
-        }
-      });
-    } catch (error) {
-      console.log('Error playing sound:', error);
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to play sound' });
-    }
-  };
-
-  const formatDateTime = (dateString) => {
-    const options = { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
-    return new Date(dateString).toLocaleString(undefined, options);
-  };
-
-  const renderItem = ({ item }) => {
-    const isOwner = item.user?._id === user?._id || item.user === user?._id;
-    return (
-      <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-        <View style={styles.cardHeader}>
-          <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{item.title}</Text>
-          {isOwner && (
-            <TouchableOpacity onPress={() => handleDelete(item._id)}>
-              <Ionicons name="trash-outline" size={20} color="#ff6b81" />
-            </TouchableOpacity>
-          )}
-        </View>
-        <Text style={[styles.cardDate, { color: theme.colors.primary }]}>{formatDateTime(item.date)}</Text>
-        
-        {item.customSoundUrl ? (
-          <TouchableOpacity 
-            style={[styles.audioBtn, { backgroundColor: theme.colors.inputBackground }]} 
-            onPress={() => playSound(item.customSoundUrl, item._id)}
-          >
-            <Ionicons 
-              name={isPlaying && playingId === item._id ? "pause-circle" : "play-circle"} 
-              size={24} 
-              color={theme.colors.primary} 
-            />
-            <Text style={[styles.audioText, { color: theme.colors.text }]}>
-              {isPlaying && playingId === item._id ? "Playing..." : "Play Reminder Sound"}
-            </Text>
+const renderItem = ({ item }) => {
+  const isOwner = item.user?._id === user?._id || item.user === user?._id;
+  return (
+    <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+      <View style={styles.cardHeader}>
+        <Text style={[styles.cardTitle, { color: theme.colors.text }]}>{item.title}</Text>
+        {isOwner && (
+          <TouchableOpacity onPress={() => handleDelete(item._id)}>
+            <Ionicons name="trash-outline" size={20} color="#ff6b81" />
           </TouchableOpacity>
-        ) : (
-          <Text style={[styles.noAudioText, { color: theme.colors.textSecondary }]}>No custom sound</Text>
         )}
       </View>
-    );
-  };
+      <Text style={[styles.cardDate, { color: theme.colors.primary }]}>{formatDateTime(item.date)}</Text>
 
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
+      {item.customSoundUrl ? (
+        <TouchableOpacity
+          style={[styles.audioBtn, { backgroundColor: theme.colors.inputBackground }]}
+          onPress={() => playSound(item.customSoundUrl, item._id)}
+        >
+          <Ionicons
+            name={isPlaying && playingId === item._id ? 'pause-circle' : 'play-circle'}
+            size={24}
+            color={theme.colors.primary}
+          />
+          <View style={{ marginLeft: 10, flex: 1 }}>
+            <Text style={[styles.audioText, { color: theme.colors.text }]}>
+              {isPlaying && playingId === item._id ? 'Playing...' : 'Play Reminder Sound'}
+            </Text>
+            <Text style={{ fontSize: 11, color: theme.colors.textSecondary }}>
+              Auto-plays automatically at reminder time
+            </Text>
+          </View>
+        </TouchableOpacity>
+      ) : (
+        <Text style={[styles.noAudioText, { color: theme.colors.textSecondary }]}>No custom sound</Text>
+      )}
+    </View>
+  );
+};
+
+return (
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
       <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginRight: 15 }}>
@@ -325,115 +332,131 @@ export default function DatesToRememberScreen() {
         />
       )}
 
-      <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setModalVisible(false); resetForm(); }}>
-        <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <View style={[styles.modalHeader, { borderBottomColor: theme.colors.border }]}>
-            <TouchableOpacity onPress={() => { setModalVisible(false); resetForm(); }}>
-              <Text style={{ fontSize: 16, color: theme.colors.text }}>Cancel</Text>
-            </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Add Date</Text>
-            <TouchableOpacity onPress={handleSaveDate} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color={theme.colors.primary} />
-              ) : (
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.primary }}>Save</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.modalContent}>
-            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Event Title</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
-              placeholder="e.g. Anniversary"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={title}
-              onChangeText={setTitle}
-            />
-
-            <Text style={[styles.label, { color: theme.colors.textSecondary, marginTop: 20 }]}>Date & Time</Text>
-            {Platform.OS === 'ios' ? (
-              <DateTimePicker
-                value={date}
-                mode="datetime"
-                display="spinner"
-                onChange={(event, selectedDate) => {
-                  const currentDate = selectedDate || date;
-                  setDate(currentDate);
-                }}
-                style={{ height: 120 }}
-              />
-            ) : (
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <TouchableOpacity 
-                  style={[styles.input, { flex: 1, backgroundColor: theme.colors.inputBackground, justifyContent: 'center' }]} 
-                  onPress={() => setShowDatePicker(true)}
-                >
-                  <Text style={{ color: theme.colors.text }}>{new Date(date).toLocaleDateString()}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.input, { flex: 1, backgroundColor: theme.colors.inputBackground, justifyContent: 'center' }]} 
-                  onPress={() => setShowTimePicker(true)}
-                >
-                  <Text style={{ color: theme.colors.text }}>{new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-                </TouchableOpacity>
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={date}
-                    mode="date"
-                    display="default"
-                    onChange={(event, selectedDate) => {
-                      setShowDatePicker(false);
-                      if (event.type === 'set' && selectedDate) {
-                        const newDate = new Date(date);
-                        newDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-                        setDate(newDate);
-                      }
+                  <Modal
+                    visible={modalVisible}
+                    animationType="slide"
+                    presentationStyle="pageSheet"
+                    onRequestClose={() => {
+                      setModalVisible(false);
+                      resetForm();
                     }}
-                  />
-                )}
-                {showTimePicker && (
-                  <DateTimePicker
-                    value={date}
-                    mode="time"
-                    display="default"
-                    onChange={(event, selectedDate) => {
-                      setShowTimePicker(false);
-                      if (event.type === 'set' && selectedDate) {
-                        const newDate = new Date(date);
-                        newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
-                        setDate(newDate);
-                      }
-                    }}
-                  />
-                )}
-              </View>
-            )}
+                  >
+                    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top', 'bottom']}>
+                      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+                        <View style={[styles.modalHeader, { borderBottomColor: theme.colors.border }]}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setModalVisible(false);
+                              resetForm();
+                            }}
+                              >
+                              <Text style={{ fontSize: 16, color: theme.colors.text }}>Cancel</Text>
+              </TouchableOpacity>
+                          <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Add Date</Text>
+                          <TouchableOpacity onPress={handleSaveDate} disabled={isSubmitting}>
+                            {isSubmitting ? (
+                              <ActivityIndicator size="small" color={theme.colors.primary} />
+                            ) : (
+                              <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.colors.primary }}>Save</Text>
+                            )}
+                      </TouchableOpacity>
+                    </View>
 
-            <Text style={[styles.label, { color: theme.colors.textSecondary, marginTop: 20 }]}>Reminder Sound</Text>
-            <TouchableOpacity 
-              style={[styles.uploadBtn, { borderColor: theme.colors.primary }]} 
-              onPress={handlePickAudio}
-            >
-              <Ionicons name="musical-notes-outline" size={24} color={theme.colors.primary} />
-              <Text style={[styles.uploadText, { color: theme.colors.primary }]}>
-                {selectedAudio ? selectedAudio.name : 'Select Audio File'}
-              </Text>
-            </TouchableOpacity>
-            <Text style={[styles.helpText, { color: theme.colors.textSecondary }]}>
-              This custom sound can be played on your special date (.mp3, .m4a, .wav supported).
-            </Text>
-          </View>
+            <ScrollView
+                      contentContainerStyle={styles.modalContent}
+                      keyboardShouldPersistTaps="handled"
+                      showsVerticalScrollIndicator={false}
+                    >
+                        <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Event Title</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text }]}
+                          placeholder="e.g. Anniversary"
+                          placeholderTextColor={theme.colors.textSecondary}
+                          value={title}
+                          onChangeText={setTitle}
+                        />
+
+                        <Text style={[styles.label, { color: theme.colors.textSecondary, marginTop: 20 }]}>Date & Time</Text>
+                        {Platform.OS === 'ios' ? (
+                          <DateTimePicker
+                            value={date}
+                            mode="datetime"
+                            display="spinner"
+                            onChange={(event, selectedDate) => {
+                              const currentDate = selectedDate || date;
+                              setDate(currentDate);
+                            }}
+                            style={{ height: 120 }}
+                          />
+                        ) : (
+                          <View style={{ flexDirection: 'row', gap: 10 }}>
+                            <TouchableOpacity
+                              style={[styles.input, { flex: 1, backgroundColor: theme.colors.inputBackground, justifyContent: 'center' }]}
+                              onPress={() => setShowDatePicker(true)}
+                            >
+                              <Text style={{ color: theme.colors.text }}>{new Date(date).toLocaleDateString()}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.input, { flex: 1, backgroundColor: theme.colors.inputBackground, justifyContent: 'center' }]}
+                              onPress={() => setShowTimePicker(true)}
+                            >
+                              <Text style={{ color: theme.colors.text }}>
+                                {new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </Text>
+                            </TouchableOpacity>
+                            {showDatePicker && (
+                              <DateTimePicker
+                                value={date}
+                                mode="date"
+                                display="default"
+                                onChange={(event, selectedDate) => {
+                                  setShowDatePicker(false);
+                                  if (event.type === 'set' && selectedDate) {
+                                    const newDate = new Date(date);
+                                    newDate.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+                                    setDate(newDate);
+                                  }
+                                }}
+                              />
+                            )}
+                            {showTimePicker && (
+                              <DateTimePicker
+                                value={date}
+                                mode="time"
+                                display="default"
+                                onChange={(event, selectedDate) => {
+                                  setShowTimePicker(false);
+                                  if (event.type === 'set' && selectedDate) {
+                                    const newDate = new Date(date);
+                                    newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0, 0);
+                                    setDate(newDate);
+                                  }
+                                }}
+                              />
+                            )}
+                          </View>
+                        )}
+
+                        <Text style={[styles.label, { color: theme.colors.textSecondary, marginTop: 20 }]}>Reminder Sound</Text>
+                        <TouchableOpacity style={[styles.uploadBtn, { borderColor: theme.colors.primary }]} onPress={handlePickAudio}>
+                          <Ionicons name="musical-notes-outline" size={24} color={theme.colors.primary} />
+                          <Text style={[styles.uploadText, { color: theme.colors.primary }]} numberOfLines={1}>
+                            {selectedAudio ? selectedAudio.name : 'Select Audio File'}
+                          </Text>
+                        </TouchableOpacity>
+                        <Text style={[styles.helpText, { color: theme.colors.textSecondary }]}>
+                          This custom sound will play automatically when the reminder time arrives (.mp3, .m4a, .wav supported).
+                        </Text>
+            </ScrollView>
         </KeyboardAvoidingView>
-      </Modal>
     </SafeAreaView>
+  </Modal>
+    </SafeAreaView >
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -442,29 +465,12 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderBottomWidth: 1,
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  center: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  listContent: {
-    padding: 20,
-  },
-  emptyContainer: {
-    marginTop: 100,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  headerTitle: { fontSize: 20, fontWeight: 'bold' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  listContent: { padding: 20 },
+  emptyContainer: { marginTop: 100, alignItems: 'center' },
+  emptyText: { fontSize: 16 },
   card: {
     padding: 16,
     borderRadius: 16,
@@ -482,29 +488,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  cardDate: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
+  cardTitle: { fontSize: 18, fontWeight: 'bold' },
+  cardDate: { fontSize: 15, fontWeight: '600', marginBottom: 14 },
   audioBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 10,
     borderRadius: 12,
   },
-  audioText: {
-    marginLeft: 10,
-    fontWeight: '500',
-  },
-  noAudioText: {
-    fontStyle: 'italic',
-    fontSize: 13,
-  },
+  audioText: { fontWeight: '600', fontSize: 14 },
+  noAudioText: { fontStyle: 'italic', fontSize: 13 },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -512,24 +505,10 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  modalContent: {
-    padding: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    height: 50,
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    fontSize: 16,
-  },
+  modalTitle: { fontSize: 18, fontWeight: 'bold' },
+  modalContent: { padding: 20, paddingBottom: 60 },
+  label: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
+  input: { height: 50, borderRadius: 12, paddingHorizontal: 15, fontSize: 16 },
   uploadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -538,15 +517,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderStyle: 'dashed',
     borderRadius: 12,
+    paddingHorizontal: 14,
   },
-  uploadText: {
-    marginLeft: 10,
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  helpText: {
-    fontSize: 12,
-    marginTop: 8,
-    textAlign: 'center',
-  }
+  uploadText: { marginLeft: 10, fontWeight: '600', fontSize: 15, flexShrink: 1 },
+  helpText: { fontSize: 12, marginTop: 8, textAlign: 'center', lineHeight: 18 },
 });

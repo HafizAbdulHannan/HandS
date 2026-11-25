@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Modal, TextInput, Alert, Share, RefreshControl, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Modal, TextInput, Alert, Share, RefreshControl, ActivityIndicator, Linking, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +14,7 @@ export default function ProfileScreen() {
   const { user } = useAuth();
   const { theme } = useThemeContext();
   const isFocused = useIsFocused();
-  
+
   const [posts, setPosts] = useState([]);
   const [partner, setPartner] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -145,14 +145,14 @@ export default function ProfileScreen() {
     setOptionsModalVisible(false);
     if (!selectedPostOptions) return;
     const postId = selectedPostOptions._id;
-    
+
     Alert.alert(
       "Delete Post",
       "Are you sure you want to delete this post?",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
+        {
+          text: "Delete",
           style: "destructive",
           onPress: async () => {
             setPosts(posts.filter(p => p._id !== postId));
@@ -208,7 +208,7 @@ export default function ProfileScreen() {
       return (
         <TouchableOpacity
           style={[styles.fileAttachmentBox, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]}
-          onPress={() => Linking.openURL(resolvedUrl).catch(() => {})}
+          onPress={() => Linking.openURL(resolvedUrl).catch(() => { })}
         >
           <Ionicons name="document-text" size={26} color={theme.colors.primary} />
           <Text style={[styles.fileAttachmentName, { color: theme.colors.text }]} numberOfLines={1}>{fileName}</Text>
@@ -285,7 +285,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         )}
       </View>
-      
+
       <View style={styles.actionButtonsContainer}>
         <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.colors.primary }]} onPress={() => navigation.navigate('EditProfile')}>
           <Ionicons name="pencil-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
@@ -320,7 +320,7 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           )}
         </View>
-        
+
         {editingPostId === item._id ? (
           <View style={styles.editPostContainer}>
             <TextInput
@@ -341,9 +341,9 @@ export default function ProfileScreen() {
         ) : (
           item.content ? <Text style={[styles.postText, { color: theme.colors.text }]}>{item.content}</Text> : null
         )}
-        
+
         {renderPostMedia(item)}
-        
+
         <View style={[styles.postFooter, { borderTopColor: theme.colors.border }]}>
           <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(item._id, item.likes)}>
             <Ionicons name={item.likes?.includes(user?._id) ? "heart" : "heart-outline"} size={24} color={item.likes?.includes(user?._id) ? "#ff6b81" : theme.colors.textSecondary} />
@@ -392,373 +392,376 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <FlatList
-        data={posts}
-        keyExtractor={(item) => item._id}
-        ListHeaderComponent={renderHeader}
-        renderItem={renderPost}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="images-outline" size={60} color={theme.colors.textSecondary} />
-            <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>No posts yet</Text>
-          </View>
-        }
-      />
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <FlatList
+            data={posts}
+            keyExtractor={(item) => item._id}
+            ListHeaderComponent={renderHeader}
+            renderItem={renderPost}
+            contentContainerStyle={[styles.listContent, { paddingBottom: 60 }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons name="images-outline" size={60} color={theme.colors.textSecondary} />
+                <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>No posts yet</Text>
+              </View>
+            }
+          />
+        </KeyboardAvoidingView>
 
-      {/* Post Options Modal */}
-      <Modal
-        visible={optionsModalVisible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setOptionsModalVisible(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
-          onPress={() => setOptionsModalVisible(false)}
+        {/* Post Options Modal */}
+        <Modal
+          visible={optionsModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setOptionsModalVisible(false)}
         >
-          <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
-            <View style={styles.modalDragIndicator} />
-            <TouchableOpacity style={styles.modalOptionBtn} onPress={handleEditInit}>
-              <Ionicons name="pencil-outline" size={22} color={theme.colors.text} />
-              <Text style={[styles.modalOptionText, { color: theme.colors.text }]}>Edit Post</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalOptionBtn} onPress={handleDeleteTrigger}>
-              <Ionicons name="trash-outline" size={22} color="#ff6b81" />
-              <Text style={[styles.modalOptionText, { color: '#ff6b81' }]}>Delete Post</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </SafeAreaView>
-  );
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setOptionsModalVisible(false)}
+          >
+            <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
+              <View style={styles.modalDragIndicator} />
+              <TouchableOpacity style={styles.modalOptionBtn} onPress={handleEditInit}>
+                <Ionicons name="pencil-outline" size={22} color={theme.colors.text} />
+                <Text style={[styles.modalOptionText, { color: theme.colors.text }]}>Edit Post</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalOptionBtn} onPress={handleDeleteTrigger}>
+                <Ionicons name="trash-outline" size={22} color="#ff6b81" />
+                <Text style={[styles.modalOptionText, { color: '#ff6b81' }]}>Delete Post</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      </SafeAreaView>
+      );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+      const styles = StyleSheet.create({
+        container: {
+        flex: 1,
   },
-  listContent: {
-    paddingBottom: 40,
+      listContent: {
+        paddingBottom: 40,
   },
-  profileHeader: {
-    borderBottomWidth: 1,
-    paddingBottom: 18,
-    marginBottom: 12,
+      profileHeader: {
+        borderBottomWidth: 1,
+      paddingBottom: 18,
+      marginBottom: 12,
   },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 15,
+      topBar: {
+        flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      paddingBottom: 15,
   },
-  topUsername: {
-    fontSize: 22,
-    fontWeight: 'bold',
+      topUsername: {
+        fontSize: 22,
+      fontWeight: 'bold',
   },
-  infoSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 15,
+      infoSection: {
+        flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      marginBottom: 15,
   },
-  avatarContainer: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: '#ff6b81',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 26,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#ff6b81',
+      avatarContainer: {
+        width: 84,
+      height: 84,
+      borderRadius: 42,
+      backgroundColor: '#ff6b81',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 26,
+      overflow: 'hidden',
+      borderWidth: 2,
+      borderColor: '#ff6b81',
   },
-  avatarText: {
-    fontSize: 34,
-    fontWeight: 'bold',
-    color: '#ffffff',
+      avatarText: {
+        fontSize: 34,
+      fontWeight: 'bold',
+      color: '#ffffff',
   },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+      avatarImage: {
+        width: '100%',
+      height: '100%',
+      resizeMode: 'cover',
   },
-  statsContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+      statsContainer: {
+        flex: 1,
+      flexDirection: 'row',
+      justifyContent: 'space-around',
   },
-  statBox: {
-    alignItems: 'center',
+      statBox: {
+        alignItems: 'center',
   },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
+      statNumber: {
+        fontSize: 20,
+      fontWeight: 'bold',
   },
-  statLabel: {
-    fontSize: 13,
-    marginTop: 2,
+      statLabel: {
+        fontSize: 13,
+      marginTop: 2,
   },
-  bioSection: {
-    paddingHorizontal: 20,
-    marginBottom: 16,
+      bioSection: {
+        paddingHorizontal: 20,
+      marginBottom: 16,
   },
-  name: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    marginBottom: 2,
+      name: {
+        fontSize: 17,
+      fontWeight: 'bold',
+      marginBottom: 2,
   },
-  emailText: {
-    fontSize: 13,
-    marginBottom: 6,
+      emailText: {
+        fontSize: 13,
+      marginBottom: 6,
   },
-  bioText: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 10,
+      bioText: {
+        fontSize: 14,
+      lineHeight: 20,
+      marginBottom: 10,
   },
-  partnerBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255, 107, 129, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 107, 129, 0.3)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 6,
+      partnerBadge: {
+        flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      backgroundColor: 'rgba(255, 107, 129, 0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(255, 107, 129, 0.3)',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      gap: 6,
   },
-  partnerBadgeText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#ff6b81',
+      partnerBadgeText: {
+        fontSize: 13,
+      fontWeight: '600',
+      color: '#ff6b81',
   },
-  actionButtonsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    justifyContent: 'space-between',
-    gap: 10,
+      actionButtonsContainer: {
+        flexDirection: 'row',
+      paddingHorizontal: 20,
+      justifyContent: 'space-between',
+      gap: 10,
   },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
+      actionBtn: {
+        flex: 1,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      paddingVertical: 10,
+      borderRadius: 10,
+      alignItems: 'center',
   },
-  actionBtnText: {
-    fontWeight: '600',
-    fontSize: 14,
+      actionBtnText: {
+        fontWeight: '600',
+      fontSize: 14,
   },
-  postCard: {
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    marginHorizontal: 16,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 5,
-    elevation: 2,
+      postCard: {
+        borderRadius: 20,
+      padding: 20,
+      marginBottom: 16,
+      marginHorizontal: 16,
+      borderWidth: 1,
+      shadowColor: '#000',
+      shadowOffset: {width: 0, height: 4 },
+      shadowOpacity: 0.06,
+      shadowRadius: 5,
+      elevation: 2,
   },
-  postHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginBottom: 16 
+      postHeader: {
+        flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 16 
   },
-  deletePostBtn: {
-    padding: 5,
+      deletePostBtn: {
+        padding: 5,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
+      modalOverlay: {
+        flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.4)',
+      justifyContent: 'flex-end',
   },
-  modalContent: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
+      modalContent: {
+        borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      padding: 24,
+      paddingBottom: 40,
   },
-  modalDragIndicator: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#e1e1e1',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 20,
+      modalDragIndicator: {
+        width: 40,
+      height: 4,
+      backgroundColor: '#e1e1e1',
+      borderRadius: 2,
+      alignSelf: 'center',
+      marginBottom: 20,
   },
-  modalOptionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
+      modalOptionBtn: {
+        flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 16,
   },
-  modalOptionText: {
-    fontSize: 16,
-    marginLeft: 16,
-    fontWeight: '600',
+      modalOptionText: {
+        fontSize: 16,
+      marginLeft: 16,
+      fontWeight: '600',
   },
-  editPostContainer: {
-    marginTop: 10,
-    marginBottom: 10,
+      editPostContainer: {
+        marginTop: 10,
+      marginBottom: 10,
   },
-  editPostInput: {
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 15,
-    minHeight: 60,
-    textAlignVertical: 'top',
-    borderWidth: 1,
+      editPostInput: {
+        borderRadius: 12,
+      padding: 12,
+      fontSize: 15,
+      minHeight: 60,
+      textAlignVertical: 'top',
+      borderWidth: 1,
   },
-  editPostActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 12,
+      editPostActions: {
+        flexDirection: 'row',
+      justifyContent: 'flex-end',
+      marginTop: 12,
   },
-  editCancelBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 8,
-    justifyContent: 'center',
+      editCancelBtn: {
+        paddingHorizontal: 16,
+      paddingVertical: 8,
+      marginRight: 8,
+      justifyContent: 'center',
   },
-  editCancelText: {
-    color: '#888',
-    fontWeight: '600',
+      editCancelText: {
+        color: '#888',
+      fontWeight: '600',
   },
-  editSaveBtn: {
-    backgroundColor: '#ff6b81',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-    justifyContent: 'center',
+      editSaveBtn: {
+        backgroundColor: '#ff6b81',
+      paddingHorizontal: 20,
+      paddingVertical: 8,
+      borderRadius: 20,
+      justifyContent: 'center',
   },
-  editSaveText: {
-    color: '#fff',
-    fontWeight: '600',
+      editSaveText: {
+        color: '#fff',
+      fontWeight: '600',
   },
-  avatarPlaceholder: { 
-    width: 48, 
-    height: 48, 
-    borderRadius: 24, 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    marginRight: 14,
-    backgroundColor: '#ff6b81'
+      avatarPlaceholder: {
+        width: 48,
+      height: 48,
+      borderRadius: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 14,
+      backgroundColor: '#ff6b81'
   },
-  avatarLetter: { 
-    color: '#ffffff', 
-    fontWeight: 'bold', 
-    fontSize: 20 
+      avatarLetter: {
+        color: '#ffffff',
+      fontWeight: 'bold',
+      fontSize: 20 
   },
-  postAuthor: { 
-    fontWeight: 'bold', 
-    fontSize: 17, 
-    marginBottom: 2,
+      postAuthor: {
+        fontWeight: 'bold',
+      fontSize: 17,
+      marginBottom: 2,
   },
-  postTime: { 
-    fontSize: 13, 
+      postTime: {
+        fontSize: 13, 
   },
-  postText: { 
-    fontSize: 16, 
-    lineHeight: 24,
-    marginBottom: 12
+      postText: {
+        fontSize: 16,
+      lineHeight: 24,
+      marginBottom: 12
   },
-  feedPostImage: {
-    width: '100%',
-    height: 220,
-    borderRadius: 12,
-    marginBottom: 12,
-    backgroundColor: '#000',
+      feedPostImage: {
+        width: '100%',
+      height: 220,
+      borderRadius: 12,
+      marginBottom: 12,
+      backgroundColor: '#000',
   },
-  fileAttachmentBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 12,
-    gap: 10,
+      fileAttachmentBox: {
+        flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      marginBottom: 12,
+      gap: 10,
   },
-  fileAttachmentName: {
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
+      fileAttachmentName: {
+        fontSize: 14,
+      fontWeight: '600',
+      flex: 1,
   },
-  postFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    paddingTop: 12,
+      postFooter: {
+        flexDirection: 'row',
+      alignItems: 'center',
+      borderTopWidth: 1,
+      paddingTop: 12,
   },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 24,
+      actionButton: {
+        flexDirection: 'row',
+      alignItems: 'center',
+      marginRight: 24,
   },
-  actionText: {
-    marginLeft: 6,
-    fontSize: 15,
-    fontWeight: '600',
+      actionText: {
+        marginLeft: 6,
+      fontSize: 15,
+      fontWeight: '600',
   },
-  commentSection: {
-    marginTop: 12,
-    borderTopWidth: 1,
-    paddingTop: 12,
+      commentSection: {
+        marginTop: 12,
+      borderTopWidth: 1,
+      paddingTop: 12,
   },
-  commentItem: {
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 8,
+      commentItem: {
+        padding: 10,
+      borderRadius: 12,
+      marginBottom: 8,
   },
-  commentAuthor: {
-    fontWeight: 'bold',
-    fontSize: 13,
-    marginBottom: 2,
+      commentAuthor: {
+        fontWeight: 'bold',
+      fontSize: 13,
+      marginBottom: 2,
   },
-  commentText: {
-    fontSize: 14,
+      commentText: {
+        fontSize: 14,
   },
-  commentInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginTop: 8,
+      commentInputContainer: {
+        flexDirection: 'row',
+      alignItems: 'flex-end',
+      marginTop: 8,
   },
-  commentInput: {
-    flex: 1,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
-    minHeight: 40,
-    maxHeight: 100,
-    fontSize: 14,
+      commentInput: {
+        flex: 1,
+      borderRadius: 20,
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      paddingBottom: 10,
+      minHeight: 40,
+      maxHeight: 100,
+      fontSize: 14,
   },
-  sendCommentBtn: {
-    backgroundColor: '#ff6b81',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
+      sendCommentBtn: {
+        backgroundColor: '#ff6b81',
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginLeft: 8,
   },
-  emptyContainer: {
-    alignItems: 'center',
-    marginTop: 80,
+      emptyContainer: {
+        alignItems: 'center',
+      marginTop: 80,
   },
-  emptyText: {
-    marginTop: 10,
-    fontSize: 18,
-    fontWeight: '600',
+      emptyText: {
+        marginTop: 10,
+      fontSize: 18,
+      fontWeight: '600',
   }
 });

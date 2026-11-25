@@ -8,14 +8,6 @@ import { useThemeContext } from '../context/ThemeContext';
 import Toast from 'react-native-toast-message';
 import * as Notifications from 'expo-notifications';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
-
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -39,11 +31,11 @@ export default function ForgotPasswordScreen() {
       }
 
       const response = await axiosInstance.post('/auth/forgot-password', { email });
-      
+
       const mockOtp = response.data?.mockOtp;
       if (mockOtp) {
         Toast.show({ type: 'success', text1: 'OTP Generated', text2: `Your OTP is: ${mockOtp} (check notifications)` });
-        
+
         if (finalStatus === 'granted') {
           await Notifications.scheduleNotificationAsync({
             content: {
@@ -58,13 +50,13 @@ export default function ForgotPasswordScreen() {
       } else {
         Toast.show({ type: 'success', text1: 'Success', text2: 'OTP sent to your email.' });
       }
-      
+
       navigation.navigate('VerifyOTP', { email });
     } catch (error) {
-      Toast.show({ 
-        type: 'error', 
-        text1: 'Error', 
-        text2: error.response?.data?.message || 'Failed to request OTP. Try again.' 
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.response?.data?.message || 'Failed to request OTP. Try again.'
       });
     } finally {
       setLoading(false);
@@ -73,7 +65,7 @@ export default function ForgotPasswordScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
@@ -81,38 +73,38 @@ export default function ForgotPasswordScreen() {
           <Ionicons name="arrow-back" size={28} color={theme.colors.text} />
         </TouchableOpacity>
 
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.content}>
-            <Text style={[styles.title, { color: theme.colors.text }]}>Forgot Password?</Text>
-            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Enter your email address to receive a 6-digit OTP code.</Text>
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <View style={styles.content}>
+              <Text style={[styles.title, { color: theme.colors.text }]}>Forgot Password?</Text>
+              <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Enter your email address to receive a 6-digit OTP code.</Text>
 
-          <View style={styles.inputContainer}>
-            <Text style={[styles.label, { color: theme.colors.text }]}>Email</Text>
-            <TextInput 
-              style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
-              placeholder="bubu@example.com"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-          </View>
+              <View style={styles.inputContainer}>
+                <Text style={[styles.label, { color: theme.colors.text }]}>Email</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, color: theme.colors.text }]}
+                  placeholder="bubu@example.com"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+              </View>
 
-          <TouchableOpacity 
-            style={[styles.button, { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 }]} 
-            activeOpacity={0.8} 
-            onPress={handleRequestOTP} 
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Send OTP</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-        </ScrollView>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 }]}
+                activeOpacity={0.8}
+                onPress={handleRequestOTP}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Send OTP</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

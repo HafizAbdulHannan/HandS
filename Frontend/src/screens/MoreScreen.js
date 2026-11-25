@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -16,48 +16,48 @@ export default function MoreScreen() {
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>More</Text>
       </View>
 
-      <View style={styles.content}>
-        <Animated.View entering={FadeInUp.delay(100)}>
-          <TouchableOpacity style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} onPress={() => navigation.navigate('DatesToRemember')}>
-            <Ionicons name="calendar-outline" size={24} color={theme.colors.text} style={styles.icon} />
-            <Text style={[styles.menuText, { color: theme.colors.text }]}>Dates to Remember</Text>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-          </TouchableOpacity>
-        </Animated.View>
-        
-        <Animated.View entering={FadeInUp.delay(200)}>
-          <TouchableOpacity style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} onPress={() => navigation.navigate('WatchLobby')}>
-            <Ionicons name="tv-outline" size={24} color={theme.colors.text} style={styles.icon} />
-            <Text style={[styles.menuText, { color: theme.colors.text }]}>Watch together</Text>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-          </TouchableOpacity>
-        </Animated.View>
-        
-        <Animated.View entering={FadeInUp.delay(300)}>
-          <TouchableOpacity style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} onPress={() => navigation.navigate('DrawFun')}>
-            <Ionicons name="color-palette-outline" size={24} color={theme.colors.text} style={styles.icon} />
-            <Text style={[styles.menuText, { color: theme.colors.text }]}>Draw Fun</Text>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-          </TouchableOpacity>
-        </Animated.View>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Animated.View entering={FadeInUp.delay(100)}>
+            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} onPress={() => navigation.navigate('DatesToRemember')}>
+              <Ionicons name="calendar-outline" size={24} color={theme.colors.text} style={styles.icon} />
+              <Text style={[styles.menuText, { color: theme.colors.text }]}>Dates to Remember</Text>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          </Animated.View>
 
-        <Animated.View entering={FadeInUp.delay(400)}>
-          <TouchableOpacity style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} onPress={() => navigation.navigate('MoodTracker')}>
-            <Ionicons name="happy-outline" size={24} color={theme.colors.text} style={styles.icon} />
-            <Text style={[styles.menuText, { color: theme.colors.text }]}>Mood Tracker</Text>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-          </TouchableOpacity>
-        </Animated.View>
+          <Animated.View entering={FadeInUp.delay(200)}>
+            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} onPress={() => navigation.navigate('WatchLobby')}>
+              <Ionicons name="tv-outline" size={24} color={theme.colors.text} style={styles.icon} />
+              <Text style={[styles.menuText, { color: theme.colors.text }]}>Watch together</Text>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          </Animated.View>
 
-        <Animated.View entering={FadeInUp.delay(500)}>
-          <TouchableOpacity style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} onPress={() => navigation.navigate('SharedList')}>
-            <Ionicons name="list-outline" size={24} color={theme.colors.text} style={styles.icon} />
-            <Text style={[styles.menuText, { color: theme.colors.text }]}>Collaborative List</Text>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-          </TouchableOpacity>
-        </Animated.View>
-      </View>
-    </SafeAreaView>
+          <Animated.View entering={FadeInUp.delay(300)}>
+            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} onPress={() => navigation.navigate('DrawFun')}>
+              <Ionicons name="color-palette-outline" size={24} color={theme.colors.text} style={styles.icon} />
+              <Text style={[styles.menuText, { color: theme.colors.text }]}>Draw Fun</Text>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          </Animated.View>
+
+          <Animated.View entering={FadeInUp.delay(400)}>
+            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} onPress={() => navigation.navigate('MoodTracker')}>
+              <Ionicons name="happy-outline" size={24} color={theme.colors.text} style={styles.icon} />
+              <Text style={[styles.menuText, { color: theme.colors.text }]}>Mood Tracker</Text>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          </Animated.View>
+
+          <Animated.View entering={FadeInUp.delay(500)}>
+            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} onPress={() => navigation.navigate('SharedList')}>
+              <Ionicons name="list-outline" size={24} color={theme.colors.text} style={styles.icon} />
+              <Text style={[styles.menuText, { color: theme.colors.text }]}>Collaborative List</Text>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+            </TouchableOpacity>
+          </Animated.View>
+    </ScrollView>
+    </SafeAreaView >
   );
 }
 

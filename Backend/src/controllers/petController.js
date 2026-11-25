@@ -24,13 +24,13 @@ const getPet = async (req, res) => {
   try {
     const pair = getPairKey(req.user);
     let pet = await SharedPet.findOne({ pair });
-    
+
     if (!pet) {
       pet = await SharedPet.create({ pair });
     } else {
       pet = await applyHealthDecay(pet);
     }
-    
+
     res.status(200).json(pet);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
@@ -46,13 +46,13 @@ const interactPet = async (req, res) => {
 
     const pair = getPairKey(req.user);
     let pet = await SharedPet.findOne({ pair });
-    
+
     if (!pet) {
       pet = await SharedPet.create({ pair });
     } else {
       pet = await applyHealthDecay(pet);
     }
-    
+
     if (action === 'feed') {
       pet.health = Math.min(100, pet.health + 20);
       pet.lastFed = new Date();
@@ -60,13 +60,13 @@ const interactPet = async (req, res) => {
     } else if (action === 'play') {
       pet.xp += 15;
     }
-    
+
     // Level up logic
     while (pet.xp >= pet.level * 100) {
       pet.xp -= pet.level * 100;
       pet.level += 1;
     }
-    
+
     await pet.save();
     res.status(200).json(pet);
   } catch (error) {

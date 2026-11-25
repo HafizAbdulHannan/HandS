@@ -83,7 +83,7 @@ export default function FeedbackScreen() {
       <View style={styles.fbHeader}>
         <Text style={[styles.fbUser, { color: theme.colors.text }]}>{item.user?.username || 'Anonymous'}</Text>
         <View style={styles.starsContainerSm}>
-          {[1,2,3,4,5].map(i => (
+          {[1, 2, 3, 4, 5].map(i => (
             <Ionicons key={i} name={i <= item.rating ? "star" : "star-outline"} size={14} color="#FFD700" />
           ))}
         </View>
@@ -103,9 +103,9 @@ export default function FeedbackScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         <View style={styles.header}>
@@ -120,14 +120,15 @@ export default function FeedbackScreen() {
           data={feedbacks}
           keyExtractor={item => item._id}
           renderItem={renderFeedbackItem}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 60 }]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <View style={styles.formContainer}>
               <Text style={[styles.title, { color: theme.colors.text }]}>We value your input</Text>
-              
+
               <View style={styles.ratingContainer}>
-                {[1,2,3,4,5].map(star => (
+                {[1, 2, 3, 4, 5].map(star => (
                   <TouchableOpacity key={star} onPress={() => setRating(star)}>
                     <Ionicons name={star <= rating ? "star" : "star-outline"} size={40} color="#FFD700" />
                   </TouchableOpacity>
@@ -151,7 +152,7 @@ export default function FeedbackScreen() {
                   <Text style={styles.imageBtnText}>{image ? 'Image Attached' : 'Attach Image'}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.button, submitting && styles.buttonDisabled]}
                   disabled={submitting}
                   onPress={handleSubmit}

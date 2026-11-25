@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, DeviceEventEmitter } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import axiosInstance from '../api/axiosConfig';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -41,6 +41,8 @@ import DrawFunReplyScreen from '../screens/DrawFunReplyScreen';
 import MoodTrackerScreen from '../screens/MoodTrackerScreen';
 import SharedListScreen from '../screens/SharedListScreen';
 import AskQuestionScreen from '../screens/AskQuestionScreen';
+import ManageAccountScreen from '../screens/ManageAccountScreen';
+import DateReminderManager from '../components/DateReminderManager';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -67,22 +69,26 @@ function MainTabs() {
   useEffect(() => {
     fetchRequestsCount();
     const interval = setInterval(fetchRequestsCount, 10000);
-    return () => clearInterval(interval);
+    const notifSub = DeviceEventEmitter.addListener('notifications_updated', fetchRequestsCount);
+    return () => {
+      clearInterval(interval);
+      notifSub.remove();
+    };
   }, []);
 
   useEffect(() => {
     if (socket && user) {
       const handleNewNotification = () => fetchRequestsCount();
       socket.on('receive_notification', handleNewNotification);
-      
+
       const handleWatchInvite = ({ roomCode, roomId, hostName, hostId }) => {
         const targetHostId = hostId || (typeof user.partner === 'object' ? user.partner?._id : user.partner);
         Alert.alert(
           'Watch Room Invite 🍿',
           `${hostName || 'Your partner'} has invited you to watch something together!`,
           [
-            { 
-              text: 'Decline', 
+            {
+              text: 'Decline',
               style: 'cancel',
               onPress: () => {
                 socket.emit('reject_watch_invite', {
@@ -92,8 +98,8 @@ function MainTabs() {
                 });
               }
             },
-            { 
-              text: 'Accept', 
+            {
+              text: 'Accept',
               onPress: async () => {
                 socket.emit('accept_watch_invite', {
                   hostId: targetHostId,
@@ -130,14 +136,14 @@ function MainTabs() {
   }, [socket, user, navigation]);
 
   return (
-    <Tab.Navigator 
+    <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: isDarkMode ? '#888888' : '#95a5a6',
         tabBarShowLabel: true,
-        tabBarStyle: { 
-          backgroundColor: theme.colors.card, 
+        tabBarStyle: {
+          backgroundColor: theme.colors.card,
           borderTopWidth: isDarkMode ? 1 : 0,
           borderTopColor: theme.colors.border,
           elevation: 20,
@@ -180,9 +186,9 @@ function MainTabs() {
       <Tab.Screen name="Chat" component={ChatScreen} />
       <Tab.Screen name="Gallery" component={GalleryScreen} />
       <Tab.Screen name="Location" component={MapScreen} />
-      <Tab.Screen 
-        name="Notification" 
-        component={NotificationScreen} 
+      <Tab.Screen
+        name="Notification"
+        component={NotificationScreen}
         options={{ tabBarBadge: pendingCount > 0 ? pendingCount : null }}
       />
       <Tab.Screen name="More" component={MoreScreen} />
@@ -192,49 +198,66 @@ function MainTabs() {
 }
 
 export default function AppNavigator() {
-  const { user, loading } = useAuth();
+  const { user, loading, savedAccounts } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
 
   if (showSplash || loading) {
     return <SplashScreen onFinish={() => setShowSplash(false)} />;
   }
 
+  const hasSavedAccounts = Array.isArray(savedAccounts) && savedAccounts.length > 0;
+
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-      {user ? (
-        // User is logged in
-        <>
-          <Stack.Screen name="Main" component={MainTabs} />
-          <Stack.Screen name="Pairing" component={PairingScreen} />
-          <Stack.Screen name="Conversation" component={ConversationScreen} />
-          <Stack.Screen name="Feedback" component={FeedbackScreen} />
-          <Stack.Screen name="PartnerProfile" component={PartnerProfileScreen} />
-          <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
-          <Stack.Screen name="DatesToRemember" component={DatesToRememberScreen} />
-          <Stack.Screen name="WatchLobby" component={WatchLobbyScreen} />
-          <Stack.Screen name="WatchRoom" component={WatchRoomScreen} />
-          <Stack.Screen name="DrawFun" component={DrawFunScreen} />
-          <Stack.Screen name="DrawFunReply" component={DrawFunReplyScreen} />
-          <Stack.Screen name="MoodTracker" component={MoodTrackerScreen} />
-          <Stack.Screen name="SharedList" component={SharedListScreen} />
-          <Stack.Screen name="AskQuestion" component={AskQuestionScreen} />
-          <Stack.Screen name="About" component={AboutScreen} />
-          <Stack.Screen name="Policy" component={PolicyScreen} />
-        </>
-      ) : (
-        // User is not logged in
-        <>
-          <Stack.Screen name="Intro" component={IntroScreen} />
-          <Stack.Screen name="About" component={AboutScreen} />
-          <Stack.Screen name="Policy" component={PolicyScreen} />
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Signup" component={SignupScreen} />
-          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-          <Stack.Screen name="VerifyOTP" component={VerifyOTPScreen} />
-          <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-        </>
-      )}
-    </Stack.Navigator>
+    <>
+      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+        {user ? (
+          // User is logged in
+          <>
+            <Stack.Screen name="Main" component={MainTabs} />
+            <Stack.Screen name="Pairing" component={PairingScreen} />
+            <Stack.Screen name="Conversation" component={ConversationScreen} />
+            <Stack.Screen name="Feedback" component={FeedbackScreen} />
+            <Stack.Screen name="PartnerProfile" component={PartnerProfileScreen} />
+            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+            <Stack.Screen name="ManageAccount" component={ManageAccountScreen} />
+            <Stack.Screen name="AddAccountLogin" component={LoginScreen} />
+            <Stack.Screen name="AddAccountSignup" component={SignupScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="DatesToRemember" component={DatesToRememberScreen} />
+            <Stack.Screen name="WatchLobby" component={WatchLobbyScreen} />
+            <Stack.Screen name="WatchRoom" component={WatchRoomScreen} />
+            <Stack.Screen name="DrawFun" component={DrawFunScreen} />
+            <Stack.Screen name="DrawFunReply" component={DrawFunReplyScreen} />
+            <Stack.Screen name="MoodTracker" component={MoodTrackerScreen} />
+            <Stack.Screen name="SharedList" component={SharedListScreen} />
+            <Stack.Screen name="AskQuestion" component={AskQuestionScreen} />
+            <Stack.Screen name="About" component={AboutScreen} />
+            <Stack.Screen name="Policy" component={PolicyScreen} />
+          </>
+        ) : (
+          // User is not logged in
+          <>
+            {hasSavedAccounts ? (
+              <>
+                <Stack.Screen name="Login" component={LoginScreen} />
+                <Stack.Screen name="Intro" component={IntroScreen} />
+              </>
+            ) : (
+              <>
+                <Stack.Screen name="Intro" component={IntroScreen} />
+                <Stack.Screen name="Login" component={LoginScreen} />
+              </>
+            )}
+            <Stack.Screen name="About" component={AboutScreen} />
+            <Stack.Screen name="Policy" component={PolicyScreen} />
+            <Stack.Screen name="Signup" component={SignupScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="VerifyOTP" component={VerifyOTPScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+          </>
+        )}
+      </Stack.Navigator>
+      {user ? <DateReminderManager /> : null}
+    </>
   );
 }

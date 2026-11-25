@@ -12,7 +12,7 @@ import * as Sharing from 'expo-sharing';
 
 export default function SettingScreen() {
   const navigation = useNavigation();
-  const { user, logout, loadUser } = useAuth();
+  const { user, logout, loadUser, deleteCurrentAccount } = useAuth();
   const { isDarkMode, toggleTheme, theme } = useThemeContext();
   const [partner, setPartner] = useState(null);
 
@@ -55,8 +55,8 @@ export default function SettingScreen() {
       "Are you sure you want to disconnect from your partner? You will no longer see their posts or be able to chat with them.",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Disconnect", 
+        {
+          text: "Disconnect",
           style: "destructive",
           onPress: async () => {
             try {
@@ -93,7 +93,7 @@ export default function SettingScreen() {
       const response = await axiosInstance.get('/auth/download-data', {
         responseType: 'arraybuffer'
       });
-      
+
       const fileUri = FileSystem.documentDirectory + 'HandS_UserData.zip';
       const bytes = new Uint8Array(response.data);
       let binary = '';
@@ -103,9 +103,9 @@ export default function SettingScreen() {
         binary += String.fromCharCode.apply(null, sub);
       }
       const base64 = btoa(binary);
-      
+
       await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
-      
+
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri);
       } else {
@@ -123,13 +123,9 @@ export default function SettingScreen() {
     try {
       setIsDeleting(true);
       const finalReason = deleteReason === "Others" ? otherReason : deleteReason;
-      await axiosInstance.post('/auth/delete-account', {
-        reason: finalReason,
-        password: deletePassword
-      });
+      await deleteCurrentAccount(deletePassword, finalReason);
       setIsDeleteModalVisible(false);
       Toast.show({ type: 'success', text1: 'Deleted', text2: 'Your account has been deleted.' });
-      await logout();
     } catch (error) {
       console.log('Delete account error:', error);
       Toast.show({ type: 'error', text1: 'Error', text2: error.response?.data?.message || 'Could not delete account. Check password.' });
@@ -142,7 +138,7 @@ export default function SettingScreen() {
       <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Settings</Text>
       </View>
-      
+
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Profile Overview Card */}
         <View style={[styles.profileCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
@@ -191,17 +187,17 @@ export default function SettingScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.profileActionBtn, { backgroundColor: theme.colors.primary }]}
-              onPress={() => navigation.navigate('EditProfile')}
+              onPress={() => navigation.navigate('ManageAccount')}
             >
-              <Ionicons name="create-outline" size={16} color="#fff" />
-              <Text style={[styles.profileActionText, { color: '#fff' }]}>Edit Profile</Text>
+              <Ionicons name="settings-outline" size={16} color="#fff" />
+              <Text style={[styles.profileActionText, { color: '#fff' }]}>Manage Account</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={[styles.menuContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <TouchableOpacity 
-            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]}
             onPress={() => navigation.navigate('Feedback')}
           >
             <Ionicons name="chatbubble-ellipses-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
@@ -209,8 +205,8 @@ export default function SettingScreen() {
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]}
             onPress={() => navigation.navigate('AskQuestion')}
           >
             <Ionicons name="help-circle-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
@@ -218,8 +214,8 @@ export default function SettingScreen() {
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]}
             onPress={toggleTheme}
           >
             <Ionicons name={isDarkMode ? "sunny-outline" : "moon-outline"} size={22} color={theme.colors.primary} style={styles.menuIcon} />
@@ -227,8 +223,8 @@ export default function SettingScreen() {
             <Ionicons name="swap-horizontal-outline" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]}
             onPress={() => navigation.navigate('Location')}
           >
             <Ionicons name="location-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
@@ -236,8 +232,8 @@ export default function SettingScreen() {
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]}
             onPress={handleCameraAccess}
           >
             <Ionicons name="camera-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
@@ -245,8 +241,8 @@ export default function SettingScreen() {
             <Ionicons name="open-outline" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]}
             onPress={() => navigation.navigate('Policy')}
           >
             <Ionicons name="document-text-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
@@ -254,8 +250,8 @@ export default function SettingScreen() {
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]}
             onPress={() => navigation.navigate('About')}
           >
             <Ionicons name="information-circle-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
@@ -263,8 +259,8 @@ export default function SettingScreen() {
             <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]}
             onPress={handleDownloadUpdate}
           >
             <Ionicons name="cloud-download-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
@@ -273,8 +269,8 @@ export default function SettingScreen() {
           </TouchableOpacity>
 
           {user?.partner && (
-            <TouchableOpacity 
-              style={[styles.menuItem, { borderBottomColor: theme.colors.border, borderColor: 'rgba(255, 71, 87, 0.35)', borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, marginTop: 12, marginBottom: 12 }]} 
+            <TouchableOpacity
+              style={[styles.menuItem, { borderBottomColor: theme.colors.border, borderColor: 'rgba(255, 71, 87, 0.35)', borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, marginTop: 12, marginBottom: 12 }]}
               onPress={handleUnpair}
             >
               <View style={styles.partnerAvatarContainer}>
@@ -290,16 +286,16 @@ export default function SettingScreen() {
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity 
-            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]} 
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomColor: theme.colors.border }]}
             onPress={handleLogout}
           >
             <Ionicons name="log-out-outline" size={22} color={theme.colors.icon} style={styles.menuIcon} />
             <Text style={[styles.menuText, { color: theme.colors.text }]}>Log Out</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.menuItem, { borderBottomWidth: 0 }]} 
+          <TouchableOpacity
+            style={[styles.menuItem, { borderBottomWidth: 0 }]}
             onPress={() => {
               setDeleteStep(1);
               setDeleteReason('');
@@ -320,11 +316,11 @@ export default function SettingScreen() {
         animationType="slide"
         onRequestClose={() => setIsDeleteModalVisible(false)}
       >
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
-          <ScrollView 
+          <ScrollView
             contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
@@ -342,9 +338,9 @@ export default function SettingScreen() {
                   <Text style={[styles.modalInstruction, { color: theme.colors.textSecondary }]}>
                     We're sorry to see you go. Could you tell us your reason for leaving?
                   </Text>
-                  
-                  <TouchableOpacity 
-                    style={[styles.dropdownSelector, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]} 
+
+                  <TouchableOpacity
+                    style={[styles.dropdownSelector, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border }]}
                     onPress={() => setIsDropdownOpen(!isDropdownOpen)}
                     activeOpacity={0.7}
                   >
@@ -357,7 +353,7 @@ export default function SettingScreen() {
                   {isDropdownOpen && (
                     <View style={[styles.dropdownList, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
                       {["I'm bored", "I wanna create new account", "I don't like this anymore", "Others"].map((reason, index) => (
-                        <TouchableOpacity 
+                        <TouchableOpacity
                           key={index}
                           style={[styles.dropdownItem, { borderBottomColor: index < 3 ? theme.colors.border : 'transparent' }]}
                           onPress={() => {
@@ -382,8 +378,8 @@ export default function SettingScreen() {
                     />
                   )}
 
-                  <TouchableOpacity 
-                    style={[styles.modalButton, { backgroundColor: '#ff6b81', marginTop: isDropdownOpen ? 15 : 20 }]} 
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: '#ff6b81', marginTop: isDropdownOpen ? 15 : 20 }]}
                     onPress={() => {
                       if (deleteReason === "Others" && !otherReason.trim()) {
                         Toast.show({ type: 'error', text1: 'Required', text2: 'Please specify your reason' });
@@ -412,15 +408,15 @@ export default function SettingScreen() {
                       value={deletePassword}
                       onChangeText={setDeletePassword}
                     />
-                    <TouchableOpacity 
-                      style={styles.eyeIcon} 
+                    <TouchableOpacity
+                      style={styles.eyeIcon}
                       onPress={() => setShowPassword(!showPassword)}
                     >
                       <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={theme.colors.textSecondary} />
                     </TouchableOpacity>
                   </View>
-                  <TouchableOpacity 
-                    style={[styles.modalButton, { backgroundColor: '#ff6b81', marginTop: 10 }]} 
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: '#ff6b81', marginTop: 10 }]}
                     onPress={() => {
                       if (deletePassword.trim()) setDeleteStep(3);
                       else Toast.show({ type: 'error', text1: 'Required', text2: 'Please enter your password' });
@@ -436,9 +432,9 @@ export default function SettingScreen() {
                   <Text style={[styles.modalInstruction, { color: theme.colors.textSecondary }]}>
                     Before you go, would you like to download your data? This includes a text file of your posts and folders for all your uploaded images and gallery.
                   </Text>
-                  
-                  <TouchableOpacity 
-                    style={[styles.modalButton, { backgroundColor: '#45aaf2', marginBottom: 15 }]} 
+
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: '#45aaf2', marginBottom: 15 }]}
                     onPress={handleDownloadData}
                     disabled={isDownloadingData}
                   >
@@ -449,8 +445,8 @@ export default function SettingScreen() {
                     )}
                   </TouchableOpacity>
 
-                  <TouchableOpacity 
-                    style={[styles.modalButton, { backgroundColor: '#ff4757' }]} 
+                  <TouchableOpacity
+                    style={[styles.modalButton, { backgroundColor: '#ff4757' }]}
                     onPress={handleFinalDelete}
                     disabled={isDeleting}
                   >

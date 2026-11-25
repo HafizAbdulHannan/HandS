@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
-import { Vibration, Platform } from 'react-native';
+import { Vibration, Platform, AppState } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { useAuth } from './AuthContext';
@@ -13,6 +13,7 @@ const SOCKET_URL = 'https://hands-backend.onrender.com';
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [animationType, setAnimationType] = useState(null); // 'miss_you' | 'love_you' | 'heartbeat' | null
+  const [animationKey, setAnimationKey] = useState(0);
   const { user } = useAuth();
   const animationTimeoutRef = useRef(null);
   const hapticTimeoutsRef = useRef([]);
@@ -30,35 +31,77 @@ export const SocketProvider = ({ children }) => {
       clearTimeout(animationTimeoutRef.current);
     }
     setAnimationType(type);
+    setAnimationKey((prev) => prev + 1);
     animationTimeoutRef.current = setTimeout(() => {
       setAnimationType(null);
       animationTimeoutRef.current = null;
     }, durationMs);
   }, []);
 
-  // Heartbeat vibration increased by ~5% (120ms -> 126ms, 220ms -> 231ms)
+  // Bulletproof Heartbeat Vibration (+5% pulse intensity: 126ms lub, 120ms gap, 231ms dub)
+  // Uses a 75ms flush delay after Vibration.cancel() and 3 discrete lub-dub pulses so
+  // rapid back-to-back heartbeats between both phones ALWAYS vibrate reliably on Android & iOS.
   const triggerHeartbeatVibration = useCallback(() => {
     try {
       clearHapticTimeouts();
+      Vibration.cancel();
+
       if (Platform.OS === 'android') {
-        Vibration.cancel();
-        // Realistic Heartbeat Rhythm (+5% pulse intensity): lub-dub ... lub-dub ... lub-dub
-        Vibration.vibrate([0, 126, 120, 231, 600, 126, 120, 231, 600, 126, 120, 231]);
+        const beatOffsets = [75, 1080, 2085];
+        beatOffsets.forEach((offsetMs) => {
+          const t = setTimeout(() => {
+            try {
+              Vibration.vibrate([0, 126, 120, 231], false);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => { });
+            } catch (e) { }
+          }, offsetMs);
+          hapticTimeoutsRef.current.push(t);
+        });
       } else {
         // iOS Haptic simulation of lub-dub (+5% timing/pulse boost)
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-        hapticTimeoutsRef.current.push(
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 189),
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 987),
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 1176),
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 1974),
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 2163)
-        );
+        const iosBeats = [
+          { delay: 40, style: Haptics.ImpactFeedbackStyle.Heavy },
+          { delay: 230, style: Haptics.ImpactFeedbackStyle.Medium },
+          { delay: 1030, style: Haptics.ImpactFeedbackStyle.Heavy },
+          { delay: 1220, style: Haptics.ImpactFeedbackStyle.Medium },
+          { delay: 2020, style: Haptics.ImpactFeedbackStyle.Heavy },
+          { delay: 2210, style: Haptics.ImpactFeedbackStyle.Medium },
+        ];
+        iosBeats.forEach(({ delay, style }) => {
+          const t = setTimeout(() => {
+            Haptics.impactAsync(style).catch(() => { });
+          }, delay);
+          hapticTimeoutsRef.current.push(t);
+        });
       }
     } catch (err) {
       console.warn('Vibration failed:', err);
     }
   }, [clearHapticTimeouts]);
+
+  // Track active couple time for Couple Analytics (1-minute foreground pings)
+  useEffect(() => {
+    if (!userId) return;
+
+    const sendPing = () => {
+      if (AppState.currentState === 'active') {
+        axiosInstance.post('/analytics/ping').catch(() => { });
+      }
+    };
+
+    sendPing();
+    const interval = setInterval(sendPing, 60000);
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        sendPing();
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      appStateSub.remove();
+    };
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) {
@@ -87,14 +130,16 @@ export const SocketProvider = ({ children }) => {
 
     // Listen for 'Miss You' events
     newSocket.on('receive_miss_you', () => {
-      Vibration.vibrate([0, 500, 200, 500]);
+      Vibration.cancel();
+      setTimeout(() => Vibration.vibrate([0, 500, 200, 500]), 60);
       Toast.show({ type: 'info', text1: 'Miss You! ❤️', text2: 'Your partner misses you!', position: 'top' });
       showTimedAnimation('miss_you', 5000);
     });
 
     // Listen for 'Love You' events
     newSocket.on('receive_love_you', () => {
-      Vibration.vibrate([0, 500, 200, 500]);
+      Vibration.cancel();
+      setTimeout(() => Vibration.vibrate([0, 500, 200, 500]), 60);
       Toast.show({ type: 'info', text1: 'Love You! 😘', text2: 'Your partner loves you!', position: 'top' });
       showTimedAnimation('love_you', 5000);
     });
@@ -108,7 +153,12 @@ export const SocketProvider = ({ children }) => {
     // Listen for Heartbeat
     newSocket.on('receive_heartbeat', ({ senderName }) => {
       triggerHeartbeatVibration();
-      Toast.show({ type: 'info', text1: 'Heartbeat! 💓', text2: `${senderName || 'Your partner'} sent a heartbeat!`, position: 'top' });
+      Toast.show({
+        type: 'info',
+        text1: 'Heartbeat! 💓',
+        text2: `${senderName || 'Your partner'} sent a heartbeat!`,
+        position: 'top',
+      });
       showTimedAnimation('heartbeat', 3500);
     });
 
@@ -183,10 +233,20 @@ export const SocketProvider = ({ children }) => {
   };
 
   return (
-    <SocketContext.Provider value={{ socket, sendMissYou, sendLoveYou, sendHeartbeat, sendNotification, animationType }}>
-      {children}
-    </SocketContext.Provider>
-  );
+      <SocketContext.Provider
+        value={{
+          socket,
+          sendMissYou,
+          sendLoveYou,
+          sendHeartbeat,
+          sendNotification,
+          animationType,
+          animationKey,
+        }}
+      >
+        {children}
+      </SocketContext.Provider>
+      );
 };
 
 export const useSocket = () => useContext(SocketContext);

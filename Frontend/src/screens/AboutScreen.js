@@ -18,12 +18,12 @@ export default function AboutScreen() {
       try {
         const response = await axiosInstance.get('/feedbacks');
         const allFeedbacks = response.data;
-        
+
         if (allFeedbacks.length > 0) {
           const totalRating = allFeedbacks.reduce((sum, fb) => sum + fb.rating, 0);
           const avg = (totalRating / allFeedbacks.length).toFixed(1);
           setStats({ avgRating: avg, total: allFeedbacks.length });
-          
+
           const textReviews = allFeedbacks.filter(fb => fb.text && fb.text.trim().length > 0).slice(0, 3);
           setReviews(textReviews);
         }
@@ -49,7 +49,7 @@ export default function AboutScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.logoContainer}>
           <Text style={styles.logoText}>H&S</Text>
-          <Text style={[styles.version, { color: theme.colors.textSecondary }]}>Version 1.0.12</Text>
+          <Text style={[styles.version, { color: theme.colors.textSecondary }]}>Version 1.0.13</Text>
         </View>
 
         <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1 }]}>
@@ -70,7 +70,7 @@ export default function AboutScreen() {
 
         <View style={[styles.card, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1 }]}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Ratings & Reviews</Text>
-          
+
           {loading ? (
             <ActivityIndicator color="#ff6b81" />
           ) : (
@@ -79,22 +79,22 @@ export default function AboutScreen() {
                 <Text style={[styles.ratingNumber, { color: theme.colors.text }]}>{stats.avgRating}</Text>
                 <View style={styles.stars}>
                   {[1, 2, 3, 4, 5].map(star => (
-                    <Ionicons 
-                      key={star} 
-                      name={star <= Math.round(stats.avgRating) ? "star" : "star-outline"} 
-                      size={20} 
-                      color="#FFD700" 
+                    <Ionicons
+                      key={star}
+                      name={star <= Math.round(stats.avgRating) ? "star" : "star-outline"}
+                      size={20}
+                      color="#FFD700"
                     />
                   ))}
                 </View>
               </View>
               <Text style={[styles.reviewCount, { color: theme.colors.textSecondary }]}>Based on {stats.total} reviews</Text>
-              
+
               {reviews.map(review => (
                 <View key={review._id} style={[styles.reviewBox, { backgroundColor: theme.colors.inputBackground }]}>
                   <Text style={[styles.reviewAuthor, { color: theme.colors.text }]}>{review.user?.username || 'Anonymous'}</Text>
                   <View style={{ flexDirection: 'row', marginBottom: 4 }}>
-                    {[1,2,3,4,5].map(i => (
+                    {[1, 2, 3, 4, 5].map(i => (
                       <Ionicons key={i} name={i <= review.rating ? "star" : "star-outline"} size={12} color="#FFD700" />
                     ))}
                   </View>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, Dimensions, RefreshControl, TouchableOpacity, ActivityIndicator, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Video } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -13,7 +14,7 @@ import { useThemeContext } from '../context/ThemeContext';
 import Toast from 'react-native-toast-message';
 
 const { width } = Dimensions.get('window');
-const columnWidth = (width - 60) / 2; 
+const columnWidth = (width - 60) / 2;
 
 export default function GalleryScreen() {
   const { user } = useAuth();
@@ -22,30 +23,31 @@ export default function GalleryScreen() {
   const [images, setImages] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  
+
   // Pagination State
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  
+
   const [selectedImage, setSelectedImage] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
   const handleDownload = async () => {
     if (!selectedImage || !selectedImage.mediaUrl) return;
-    
+
     try {
       setIsDownloading(true);
-      
+
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission needed', 'Sorry, we need media library permissions to save images to your device.');
         setIsDownloading(false);
         return;
       }
-      
+
       const rawUrl = selectedImage.mediaUrl;
-      const fileUri = `${FileSystem.documentDirectory}HandS_Photo_${Date.now()}.jpg`;
+      const isVideoItem = selectedImage.mediaType === 'video';
+      const fileUri = `${FileSystem.documentDirectory}HandS_${isVideoItem ? 'Video' : 'Photo'}_${Date.now()}.${isVideoItem ? 'mp4' : 'jpg'}`;
 
       if (rawUrl.startsWith('data:')) {
         const base64Data = rawUrl.split(',')[1];
@@ -78,13 +80,13 @@ export default function GalleryScreen() {
       const limit = 15;
       const response = await axiosInstance.get(`/posts/gallery?page=${pageNum}&limit=${limit}`);
       const newImages = response.data;
-      
+
       if (shouldAppend) {
         setImages(prev => [...prev, ...newImages]);
       } else {
         setImages(newImages);
       }
-      
+
       setHasMore(newImages.length >= limit);
     } catch (error) {
       console.log('Error fetching gallery:', error);
@@ -113,7 +115,7 @@ export default function GalleryScreen() {
 
   const handlePickAndUpload = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
+
     if (permissionResult.granted === false) {
       Toast.show({ type: 'error', text1: 'Permission Denied', text2: "You've refused to allow this app to access your photos!" });
       return;
@@ -140,12 +142,12 @@ export default function GalleryScreen() {
       );
       const base64Image = `data:image/jpeg;base64,${manipulated.base64}`;
 
-      await axiosInstance.post('/posts', { 
+      await axiosInstance.post('/posts', {
         content: '',
         mediaUrl: base64Image,
-        mediaType: 'image' 
+        mediaType: 'image'
       });
-      
+
       sendNotification('New Photo Uploaded! 📸', `${user?.username || 'Your partner'} uploaded a photo to the gallery.`);
       setPage(1);
       await fetchGallery(1, false);
@@ -166,8 +168,8 @@ export default function GalleryScreen() {
       "Are you sure you want to delete this photo from the gallery?",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
+        {
+          text: "Delete",
           style: "destructive",
           onPress: async () => {
             try {
@@ -190,7 +192,7 @@ export default function GalleryScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
       <View style={[styles.header, { backgroundColor: theme.colors.background }]}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Gallery</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.uploadButton}
           onPress={handlePickAndUpload}
           disabled={isUploading}
@@ -203,14 +205,14 @@ export default function GalleryScreen() {
           <Text style={styles.uploadButtonText}>{isUploading ? "Uploading..." : "Upload"}</Text>
         </TouchableOpacity>
       </View>
-      
+
       {!user?.partner && (
         <View style={styles.noPartnerBanner}>
           <Ionicons name="information-circle" size={24} color="#ff6b81" />
           <Text style={styles.noPartnerText}>Partner not linked yet. Uploading to your private space.</Text>
         </View>
       )}
-      
+
       <FlatList
         data={images}
         keyExtractor={(item) => item._id}
@@ -232,16 +234,23 @@ export default function GalleryScreen() {
           )
         }
         renderItem={({ item }) => (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.imageContainer, { backgroundColor: theme.colors.card }]}
             activeOpacity={0.8}
             onPress={() => setSelectedImage(item)}
           >
-            <Image source={{ uri: getMediaUrl(item.mediaUrl) }} style={styles.image} />
+            {item.mediaType === 'video' ? (
+              <View style={[styles.image, { backgroundColor: '#111', justifyContent: 'center', alignItems: 'center' }]}>
+                <Ionicons name="play-circle" size={48} color="#ff6b81" />
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700', marginTop: 6 }}>Video</Text>
+              </View>
+            ) : (
+              <Image source={{ uri: getMediaUrl(item.mediaUrl) }} style={styles.image} />
+            )}
             <View style={styles.uploaderTag}>
-               <Text style={styles.uploaderText}>
-                 {item.author?._id === user?._id ? 'You' : item.author?.username}
-               </Text>
+              <Text style={styles.uploaderText}>
+                {item.author?._id === user?._id ? 'You' : item.author?.username}
+              </Text>
             </View>
           </TouchableOpacity>
         )}
@@ -258,9 +267,9 @@ export default function GalleryScreen() {
           <TouchableOpacity style={styles.closeButton} onPress={() => setSelectedImage(null)}>
             <Ionicons name="close" size={32} color="#fff" />
           </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.downloadButton} 
+
+          <TouchableOpacity
+            style={styles.downloadButton}
             onPress={handleDownload}
             disabled={isDownloading}
           >
@@ -270,22 +279,32 @@ export default function GalleryScreen() {
               <Ionicons name="download-outline" size={28} color="#fff" />
             )}
           </TouchableOpacity>
-          
+
           {selectedImage?.author?._id === user?._id && (
-            <TouchableOpacity 
-              style={styles.deleteButton} 
+            <TouchableOpacity
+              style={styles.deleteButton}
               onPress={handleDelete}
             >
               <Ionicons name="trash-outline" size={28} color="#fff" />
             </TouchableOpacity>
           )}
-          
+
           {selectedImage && (
-            <Image 
-              source={{ uri: getMediaUrl(selectedImage.mediaUrl) }} 
-              style={styles.fullScreenImage} 
-              resizeMode="contain" 
-            />
+            selectedImage.mediaType === 'video' ? (
+          <Video
+            source={{ uri: getMediaUrl(selectedImage.mediaUrl) }}
+            style={styles.fullScreenImage}
+            useNativeControls
+            resizeMode="contain"
+            shouldPlay
+          />
+          ) : (
+          <Image
+            source={{ uri: getMediaUrl(selectedImage.mediaUrl) }}
+            style={styles.fullScreenImage}
+            resizeMode="contain"
+          />
+          )
           )}
         </View>
       </Modal>
@@ -358,7 +377,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: columnWidth,
-    height: columnWidth * 1.2, 
+    height: columnWidth * 1.2,
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000',

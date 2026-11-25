@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, TextInput, ActivityIndicator, Platform, Alert, Modal, KeyboardAvoidingView, Linking } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, RefreshControl, TextInput, ActivityIndicator, Platform, Alert, Modal, KeyboardAvoidingView, Linking, ScrollView } from 'react-native';
 import Animated, { FadeInUp, Layout } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,7 +17,7 @@ import * as NavigationBar from 'expo-navigation-bar';
 import Toast from 'react-native-toast-message';
 
 export default function HomeScreen({ route }) {
-  const { sendMissYou, sendLoveYou, sendHeartbeat, sendNotification, animationType } = useSocket();
+  const { sendMissYou, sendLoveYou, sendHeartbeat, sendNotification, animationType, animationKey } = useSocket();
   const { user } = useAuth();
   const { theme } = useThemeContext();
   const navigation = useNavigation();
@@ -27,10 +27,23 @@ export default function HomeScreen({ route }) {
   const [newPostContent, setNewPostContent] = useState('');
   const [isPosting, setIsPosting] = useState(false);
 
+  // Couple Analytics Dropdown State
+  const ANALYTICS_RANGES = [
+    { key: '1d', label: 'Last Day' },
+    { key: '3d', label: 'Last 3 Days' },
+    { key: '7d', label: 'Last Week' },
+    { key: '30d', label: 'Last Month' },
+    { key: 'all', label: 'Since Connected' },
+  ];
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [analyticsRange, setAnalyticsRange] = useState('7d');
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
   useFocusEffect(
     React.useCallback(() => {
       if (Platform.OS === 'android') {
-        NavigationBar.setBackgroundColorAsync(theme.colors.background).catch(() => {});
+        NavigationBar.setBackgroundColorAsync(theme.colors.background).catch(() => { });
       }
     }, [theme.colors.background])
   );
@@ -118,17 +131,37 @@ export default function HomeScreen({ route }) {
     }
   };
 
+  const fetchCoupleAnalytics = async (rangeKey = analyticsRange) => {
+    setAnalyticsLoading(true);
+    try {
+      const res = await axiosInstance.get(`/analytics?range=${rangeKey}`);
+      setAnalyticsData(res.data);
+    } catch (error) {
+      console.log('Error fetching couple analytics:', error);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchPosts();
+    fetchCoupleAnalytics(analyticsRange);
     if (user?.partner) {
       fetchDailyQuestion();
       fetchSharedPet();
     }
   }, [user?.partner]);
 
+  useEffect(() => {
+    if (analyticsOpen) {
+      fetchCoupleAnalytics(analyticsRange);
+    }
+  }, [analyticsRange, analyticsOpen]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchPosts();
+    await fetchCoupleAnalytics(analyticsRange);
     if (user?.partner) {
       await fetchPartner();
       await fetchDailyQuestion();
@@ -436,6 +469,157 @@ export default function HomeScreen({ route }) {
         </TouchableOpacity>
       )}
 
+      {/* Couple Analytics Dropdown Card (Above Daily Question) */}
+      <View style={[styles.analyticsCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+        <TouchableOpacity
+          style={styles.analyticsHeader}
+          onPress={() => setAnalyticsOpen((prev) => !prev)}
+          activeOpacity={0.75}
+        >
+          <View style={styles.analyticsHeaderLeft}>
+            <View style={styles.analyticsIconBox}>
+              <Ionicons name="analytics" size={20} color="#ff6b81" />
+            </View>
+            <View>
+              <Text style={[styles.analyticsTitle, { color: theme.colors.text }]}>Couple Analytics</Text>
+              <Text style={[styles.analyticsSubtitle, { color: theme.colors.textSecondary }]}>
+                {ANALYTICS_RANGES.find((r) => r.key === analyticsRange)?.label || 'Last Week'}
+                {analyticsData?.formattedTimeSpent ? ` • ${analyticsData.formattedTimeSpent} together` : ''}
+              </Text>
+            </View>
+          </View>
+          <Ionicons
+            name={analyticsOpen ? 'chevron-up' : 'chevron-down'}
+            size={22}
+            color={theme.colors.textSecondary}
+          />
+        </TouchableOpacity>
+
+        {analyticsOpen && (
+          <View style={[styles.analyticsBody, { borderTopColor: theme.colors.border }]}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.rangeChipsRow}
+            >
+              {ANALYTICS_RANGES.map((rangeOpt) => {
+                const isSelected = analyticsRange === rangeOpt.key;
+                return (
+                  <TouchableOpacity
+                    key={rangeOpt.key}
+                    style={[
+                      styles.rangeChip,
+                      {
+                        backgroundColor: isSelected ? theme.colors.primary : theme.colors.inputBackground,
+                        borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+                      },
+                    ]}
+                    onPress={() => setAnalyticsRange(rangeOpt.key)}
+                  >
+                    <Text
+                      style={[
+                        styles.rangeChipText,
+                        { color: isSelected ? '#fff' : theme.colors.text },
+                      ]}
+                    >
+                      {rangeOpt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {analyticsLoading && !analyticsData ? (
+              <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 16 }} />
+            ) : analyticsData ? (
+              <View>
+                <View style={styles.analyticsMetricsRow}>
+                  <View style={[styles.analyticsMetricBox, { backgroundColor: theme.colors.inputBackground }]}>
+                    <Ionicons name="time-outline" size={20} color="#ff6b81" />
+                    <Text style={[styles.analyticsMetricValue, { color: theme.colors.text }]}>
+                      {analyticsData.formattedTimeSpent || '0m'}
+                    </Text>
+                    <Text style={[styles.analyticsMetricLabel, { color: theme.colors.textSecondary }]}>
+                      Time Spent Together
+                    </Text>
+                    <Text style={[styles.analyticsMetricSub, { color: theme.colors.primary }]}>
+                      Connected {analyticsData.daysConnected || 1}d
+                    </Text>
+                  </View>
+
+                  <View style={[styles.analyticsMetricBox, { backgroundColor: theme.colors.inputBackground }]}>
+                    <Text style={{ fontSize: 20 }}>
+                      {analyticsData.moodSummary?.dominantMood?.emoji || '💛'}
+                    </Text>
+                    <Text style={[styles.analyticsMetricValue, { color: theme.colors.text, fontSize: 15 }]} numberOfLines={2}>
+                      {analyticsData.moodSummary?.status || 'No Moods Yet'}
+                    </Text>
+                    <Text style={[styles.analyticsMetricLabel, { color: theme.colors.textSecondary }]}>
+                      Overall Mood
+                    </Text>
+                    {analyticsData.moodSummary?.positivityRate !== null && analyticsData.moodSummary?.positivityRate !== undefined ? (
+                      <Text style={[styles.analyticsMetricSub, { color: '#2bcbba' }]}>
+                        {analyticsData.moodSummary.positivityRate}% Positive
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+
+                <View style={styles.latestMoodsRow}>
+                  <View style={[styles.latestMoodPill, { backgroundColor: theme.colors.inputBackground }]}>
+                    <Text style={[styles.latestMoodLabel, { color: theme.colors.textSecondary }]}>Your Mood: </Text>
+                    <Text style={[styles.latestMoodVal, { color: theme.colors.text }]}>
+                      {analyticsData.moodSummary?.myLatestMood
+                        ? `${analyticsData.moodSummary.myLatestMood.emoji} ${analyticsData.moodSummary.myLatestMood.label}`
+                        : 'Not logged'}
+                    </Text>
+                  </View>
+                  <View style={[styles.latestMoodPill, { backgroundColor: theme.colors.inputBackground }]}>
+                    <Text style={[styles.latestMoodLabel, { color: theme.colors.textSecondary }]}>Partner: </Text>
+                    <Text style={[styles.latestMoodVal, { color: theme.colors.text }]}>
+                      {analyticsData.moodSummary?.partnerLatestMood
+                        ? `${analyticsData.moodSummary.partnerLatestMood.emoji} ${analyticsData.moodSummary.partnerLatestMood.label}`
+                        : 'Not logged'}
+                    </Text>
+                  </View>
+                </View>
+
+                {analyticsData.moodSummary?.breakdown?.length > 0 && (
+                  <View style={styles.moodBreakdownBox}>
+                    {analyticsData.moodSummary.breakdown.slice(0, 4).map((m) => (
+                      <View key={m.mood} style={styles.moodBarRow}>
+                        <Text style={[styles.moodBarLabel, { color: theme.colors.text }]}>
+                          {m.emoji} {m.label}
+                        </Text>
+                        <View style={[styles.moodBarTrack, { backgroundColor: theme.colors.inputBackground }]}>
+                          <View style={[styles.moodBarFill, { width: `${Math.max(8, m.percent)}%`, backgroundColor: theme.colors.primary }]} />
+                        </View>
+                        <Text style={[styles.moodBarPct, { color: theme.colors.textSecondary }]}>
+                          {m.percent}%
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                <View style={[styles.analyticsFooterRow, { borderTopColor: theme.colors.border }]}>
+                  <Text style={[styles.analyticsFooterStat, { color: theme.colors.textSecondary }]}>
+                    💬 {analyticsData.messagesCount || 0} msgs  •  📸 {analyticsData.postsCount || 0} memories
+                  </Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('MoodTracker')}>
+                    <Text style={{ color: theme.colors.primary, fontWeight: '700', fontSize: 13 }}>Log Mood →</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <Text style={{ color: theme.colors.textSecondary, textAlign: 'center', paddingVertical: 12 }}>
+                No analytics data available yet.
+              </Text>
+            )}
+          </View>
+        )}
+      </View>
+
       {user?.partner && dailyQuestion && (
         <View style={[styles.dailyQuestionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={styles.dailyQuestionHeader}>
@@ -564,12 +748,12 @@ export default function HomeScreen({ route }) {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        {animationType === 'miss_you' && <FloatingEmojis emoji="🥺" text="Miss You" />}
-        {animationType === 'love_you' && <FloatingEmojis emoji="😘" text="Love You" />}
-        {animationType === 'heartbeat' && <FloatingEmojis emoji="💓" text="Heartbeat" />}
+        {animationType === 'miss_you' && <FloatingEmojis key={`miss_${animationKey}`} emoji="🥺" text="Miss You" />}
+        {animationType === 'love_you' && <FloatingEmojis key={`love_${animationKey}`} emoji="😘" text="Love You" />}
+        {animationType === 'heartbeat' && <FloatingEmojis key={`hb_${animationKey}`} emoji="💓" text="Heartbeat" />}
 
         <View style={[styles.header, { backgroundColor: theme.colors.background }]}>
           <View style={styles.headerTitle}>
@@ -1403,5 +1587,153 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
-  }
+},
+  analyticsCard: {
+  borderRadius: 20,
+  marginBottom: 16,
+  borderWidth: 1,
+  overflow: 'hidden',
+  elevation: 3,
+},
+  analyticsHeader: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: 16,
+},
+  analyticsHeaderLeft: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  flex: 1,
+  marginRight: 10,
+},
+  analyticsIconBox: {
+  width: 38,
+  height: 38,
+  borderRadius: 12,
+  backgroundColor: 'rgba(255, 107, 129, 0.14)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginRight: 12,
+},
+  analyticsTitle: {
+  fontSize: 17,
+  fontWeight: '800',
+},
+  analyticsSubtitle: {
+  fontSize: 12,
+  marginTop: 2,
+  fontWeight: '500',
+},
+  analyticsBody: {
+  borderTopWidth: 1,
+  paddingHorizontal: 16,
+  paddingVertical: 14,
+},
+  rangeChipsRow: {
+  flexDirection: 'row',
+  gap: 8,
+  paddingBottom: 12,
+},
+  rangeChip: {
+  paddingHorizontal: 12,
+  paddingVertical: 7,
+  borderRadius: 16,
+  borderWidth: 1,
+},
+  rangeChipText: {
+  fontSize: 12,
+  fontWeight: '700',
+},
+  analyticsMetricsRow: {
+  flexDirection: 'row',
+  gap: 10,
+  marginBottom: 10,
+},
+  analyticsMetricBox: {
+  flex: 1,
+  borderRadius: 14,
+  padding: 12,
+  alignItems: 'flex-start',
+},
+  analyticsMetricValue: {
+  fontSize: 18,
+  fontWeight: '800',
+  marginTop: 6,
+},
+  analyticsMetricLabel: {
+  fontSize: 11,
+  fontWeight: '600',
+  marginTop: 2,
+},
+  analyticsMetricSub: {
+  fontSize: 11,
+  fontWeight: '700',
+  marginTop: 4,
+},
+  latestMoodsRow: {
+  flexDirection: 'row',
+  gap: 8,
+  marginBottom: 10,
+},
+  latestMoodPill: {
+  flex: 1,
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingVertical: 8,
+  paddingHorizontal: 10,
+  borderRadius: 10,
+  flexWrap: 'wrap',
+},
+  latestMoodLabel: {
+  fontSize: 11,
+  fontWeight: '600',
+},
+  latestMoodVal: {
+  fontSize: 12,
+  fontWeight: '700',
+},
+  moodBreakdownBox: {
+  marginTop: 4,
+  marginBottom: 10,
+  gap: 6,
+},
+  moodBarRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
+},
+  moodBarLabel: {
+  width: 82,
+  fontSize: 12,
+  fontWeight: '600',
+},
+  moodBarTrack: {
+  flex: 1,
+  height: 8,
+  borderRadius: 4,
+  overflow: 'hidden',
+},
+  moodBarFill: {
+  height: '100%',
+  borderRadius: 4,
+},
+  moodBarPct: {
+  width: 34,
+  fontSize: 11,
+  fontWeight: '700',
+  textAlign: 'right',
+},
+  analyticsFooterRow: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  borderTopWidth: 1,
+  paddingTop: 10,
+  marginTop: 4,
+},
+  analyticsFooterStat: {
+  fontSize: 12,
+  fontWeight: '600',
+},
 });

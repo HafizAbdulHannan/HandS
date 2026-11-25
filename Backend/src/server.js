@@ -74,6 +74,7 @@ const questionRoutes = require('./routes/questionRoutes');
 const listRoutes = require('./routes/listRoutes');
 const petRoutes = require('./routes/petRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/pairing', pairingRoutes);
@@ -89,6 +90,7 @@ app.use('/api/questions', questionRoutes);
 app.use('/api/lists', listRoutes);
 app.use('/api/pets', petRoutes);
 app.use('/api/feedbacks', feedbackRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Static folder setup for uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -156,7 +158,7 @@ io.on('connection', (socket) => {
           }
 
           if (partner.pushToken) {
-            await sendPushNotification(partner.pushToken, 'You have a new Notification', 'Your partner misses you!');
+            await sendPushNotification(partner.pushToken, 'You have a new Notification', 'Your partner misses you!', { type: 'realtime_emotion', emotion: 'miss_you' });
           }
         }
       } catch (e) { console.error(e); }
@@ -187,7 +189,7 @@ io.on('connection', (socket) => {
           }
 
           if (partner.pushToken) {
-            await sendPushNotification(partner.pushToken, 'You have a new Notification', 'Your partner loves you!');
+            await sendPushNotification(partner.pushToken, 'You have a new Notification', 'Your partner loves you!', { type: 'realtime_emotion', emotion: 'love_you' });
           }
         }
       } catch (e) { console.error(e); }
@@ -197,6 +199,55 @@ io.on('connection', (socket) => {
   socket.on('update_location', ({ room, location }) => {
     if (room && location) {
       socket.to(room).emit('receive_location', location);
+    }
+  });
+
+  socket.on('start_trip', async ({ room, partnerId, senderId, senderName, trip }) => {
+    const pid = extractId(partnerId);
+    const sid = extractId(senderId);
+    if (room && trip) {
+      socket.to(room).emit('receive_partner_trip', trip);
+    }
+    if (pid) {
+      try {
+        const partner = await User.findById(pid);
+        if (partner) {
+          if (sid) {
+            await Notification.create({
+              recipient: pid,
+              sender: sid,
+              title: `${senderName || 'Your partner'} started a trip 🚗`,
+              message: `Heading to ${trip?.destination || 'a destination'} (${trip?.vehicleType || 'Car'}) • ETA: ${trip?.eta || 'Calculating...'}`,
+              type: 'other'
+            });
+          }
+          if (partner.pushToken) {
+            await sendPushNotification(
+              partner.pushToken,
+              `${senderName || 'Your partner'} started a trip 🚗`,
+              `Heading to ${trip?.destination || 'a destination'} (${trip?.vehicleType || 'Car'})`
+            );
+          }
+        }
+      } catch (e) { console.error(e); }
+    }
+  });
+
+  socket.on('update_trip', ({ room, trip }) => {
+    if (room && trip) {
+      socket.to(room).emit('receive_partner_trip', trip);
+    }
+  });
+
+  socket.on('end_trip', ({ room }) => {
+    if (room) {
+      socket.to(room).emit('receive_partner_trip_ended');
+    }
+  });
+
+  socket.on('delete_message_everyone', ({ room, messageId }) => {
+    if (room && messageId) {
+      socket.to(room).emit('receive_delete_message_everyone', { messageId });
     }
   });
 
@@ -245,7 +296,7 @@ io.on('connection', (socket) => {
           }
 
           if (partner.pushToken) {
-            await sendPushNotification(partner.pushToken, 'You have a new Notification', 'Your partner sent a Heartbeat!');
+            await sendPushNotification(partner.pushToken, 'You have a new Notification', 'Your partner sent a Heartbeat!', { type: 'realtime_emotion', emotion: 'heartbeat' });
           }
         }
       } catch (e) { console.error(e); }
@@ -334,7 +385,7 @@ io.on('connection', (socket) => {
         { roomCode: normalizedCode },
         { $set: { 'currentMedia.status': 'playing', 'currentMedia.timestamp': Number(timestamp) || 0 } }
       );
-    } catch (e) {}
+    } catch (e) { }
   });
 
   socket.on('media_pause', async ({ roomCode, timestamp }) => {
@@ -346,7 +397,7 @@ io.on('connection', (socket) => {
         { roomCode: normalizedCode },
         { $set: { 'currentMedia.status': 'paused', 'currentMedia.timestamp': Number(timestamp) || 0 } }
       );
-    } catch (e) {}
+    } catch (e) { }
   });
 
   socket.on('media_seek', async ({ roomCode, timestamp }) => {
@@ -358,7 +409,7 @@ io.on('connection', (socket) => {
         { roomCode: normalizedCode },
         { $set: { 'currentMedia.timestamp': Number(timestamp) || 0 } }
       );
-    } catch (e) {}
+    } catch (e) { }
   });
 
   socket.on('sync_media', async ({ roomCode, timestamp, playing }) => {
@@ -375,7 +426,7 @@ io.on('connection', (socket) => {
           }
         }
       );
-    } catch (e) {}
+    } catch (e) { }
   });
 
   socket.on('send_reaction', ({ roomCode, reaction, senderName }) => {
@@ -401,7 +452,7 @@ io.on('connection', (socket) => {
           }
         }
       );
-    } catch (e) {}
+    } catch (e) { }
   });
 
   socket.on('kick_user', async ({ roomCode, userId }) => {
@@ -413,7 +464,7 @@ io.on('connection', (socket) => {
         { roomCode: normalizedCode },
         { $pull: { participants: userId } }
       );
-    } catch (e) {}
+    } catch (e) { }
   });
 
   socket.on('delete_room', ({ roomCode }) => {

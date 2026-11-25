@@ -8,7 +8,7 @@ const VALID_MOODS = ['happy', 'sad', 'angry', 'excited', 'tired', 'loved', 'stre
 const logMood = async (req, res) => {
   try {
     const { mood, note } = req.body;
-    
+
     if (!mood || !VALID_MOODS.includes(String(mood).toLowerCase())) {
       return res.status(400).json({ message: 'Valid mood is required' });
     }

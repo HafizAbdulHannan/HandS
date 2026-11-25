@@ -142,8 +142,9 @@ const acceptPairingRequest = async (req, res) => {
     }
 
     // Update both users to reference each other
-    await User.findByIdAndUpdate(request.sender, { partner: req.user._id });
-    await User.findByIdAndUpdate(req.user._id, { partner: request.sender });
+    const pairedAt = new Date();
+    await User.findByIdAndUpdate(request.sender, { partner: req.user._id, pairedAt });
+    await User.findByIdAndUpdate(req.user._id, { partner: request.sender, pairedAt });
 
     // Mark request as accepted
     request.status = 'accepted';
@@ -191,15 +192,15 @@ const getPartnerDetails = async (req, res) => {
       return res.status(404).json({ message: 'No partner connected' });
     }
     const partner = await User.findById(req.user.partner)
-      .select('fullName username email phoneNumber avatar bio mood partner location createdAt');
-    if (!partner) {
-      return res.status(404).json({ message: 'Partner not found' });
-    }
-    res.status(200).json(partner);
+      .select('fullName username email phoneNumber avatar bio mood partner location activeTrip pairedAt createdAt');
+if (!partner) {
+  return res.status(404).json({ message: 'Partner not found' });
+}
+res.status(200).json(partner);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
-  }
+  console.error(error);
+  res.status(500).json({ message: 'Server error' });
+}
 };
 
 // @desc    Reject a pairing request
@@ -244,8 +245,8 @@ const unpair = async (req, res) => {
     const partnerId = user.partner;
 
     // Remove partner reference from both users
-    await User.findByIdAndUpdate(user._id, { partner: null });
-    await User.findByIdAndUpdate(partnerId, { partner: null });
+    await User.findByIdAndUpdate(user._id, { partner: null, pairedAt: null, 'activeTrip.active': false });
+    await User.findByIdAndUpdate(partnerId, { partner: null, pairedAt: null, 'activeTrip.active': false });
 
     await PairingRequest.deleteMany({
       $or: [

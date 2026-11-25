@@ -82,7 +82,7 @@ export default function AskQuestionScreen() {
       {item.imageUrl ? (
         <Image source={{ uri: getMediaUrl(item.imageUrl) }} style={styles.qImage} />
       ) : null}
-      
+
       {item.devReply ? (
         <View style={styles.devReplyContainer}>
           <Text style={styles.devReplyTitle}>Developer Answer:</Text>
@@ -98,9 +98,9 @@ export default function AskQuestionScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         <View style={styles.header}>
@@ -115,13 +115,14 @@ export default function AskQuestionScreen() {
           data={questions}
           keyExtractor={item => item._id}
           renderItem={renderQuestionItem}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 60 }]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <View style={styles.formContainer}>
               <Text style={[styles.title, { color: theme.colors.text }]}>Have a question?</Text>
               <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Ask the developer anything! Attach screenshots if you need help with a bug.</Text>
-              
+
               <TextInput
                 style={[styles.textInput, { backgroundColor: theme.colors.inputBackground, borderColor: theme.colors.border, color: theme.colors.text }]}
                 multiline
@@ -139,7 +140,7 @@ export default function AskQuestionScreen() {
                   <Text style={styles.imageBtnText}>{image ? 'Screenshot Attached' : 'Attach Screenshot'}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.button, submitting && styles.buttonDisabled]}
                   disabled={submitting}
                   onPress={handleSubmit}

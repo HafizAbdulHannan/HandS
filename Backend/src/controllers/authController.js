@@ -10,6 +10,7 @@ const QuestionAnswer = require('../models/QuestionAnswer');
 const SharedListItem = require('../models/SharedListItem');
 const SharedPet = require('../models/SharedPet');
 const WatchRoom = require('../models/WatchRoom');
+const CoupleActivity = require('../models/CoupleActivity');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
@@ -155,7 +156,7 @@ const updateProfile = async (req, res) => {
   try {
     const { fullName, username, bio, avatar } = req.body;
     const user = req.user;
-    
+
     if (fullName) user.fullName = String(fullName).trim();
     if (username) {
       const trimmedUsername = String(username).trim();
@@ -173,6 +174,48 @@ const updateProfile = async (req, res) => {
   } catch (error) {
     console.error('updateProfile error:', error.message);
     res.status(500).json({ message: error.message || 'Server error' });
+  }
+};
+
+// @desc    Update or end user's active trip
+// @route   PUT /api/auth/trip
+// @access  Private
+const updateTrip = async (req, res) => {
+  try {
+    const tripData = req.body;
+    if (!tripData || tripData.active === false) {
+      req.user.activeTrip = {
+        active: false,
+        destination: '',
+        routeCoordinates: [],
+        updatedAt: new Date(),
+      };
+    } else {
+      req.user.activeTrip = {
+        active: true,
+        destination: tripData.destination || '',
+        destinationCoords: tripData.destinationCoords || undefined,
+        startLocation: tripData.startLocation || undefined,
+        currentLocation: tripData.currentLocation || undefined,
+        vehicleType: tripData.vehicleType || 'Car',
+        totalDistance: tripData.totalDistance || '',
+        totalDistanceMeters: Number(tripData.totalDistanceMeters) || 0,
+        coveredDistance: tripData.coveredDistance || '0.0 km',
+        coveredDistanceMeters: Number(tripData.coveredDistanceMeters) || 0,
+        eta: tripData.eta || '',
+        speed: Number(tripData.speed) || 0,
+        routeCoordinates: Array.isArray(tripData.routeCoordinates)
+          ? tripData.routeCoordinates.slice(0, 600)
+          : [],
+        startedAt: tripData.startedAt ? new Date(tripData.startedAt) : new Date(),
+        updatedAt: new Date(),
+      };
+    }
+    await req.user.save();
+    res.status(200).json({ activeTrip: req.user.activeTrip });
+  } catch (error) {
+    console.error('Update trip error:', error);
+    res.status(500).json({ message: 'Server error updating trip' });
   }
 };
 
@@ -257,7 +300,7 @@ const verifyOTP = async (req, res) => {
       return res.status(400).json({ message: 'Email and OTP are required' });
     }
 
-    const user = await User.findOne({ 
+    const user = await User.findOne({
       email: String(email).trim().toLowerCase(),
       resetPasswordExpire: { $gt: Date.now() }
     });
@@ -288,7 +331,7 @@ const resetPassword = async (req, res) => {
       return res.status(400).json({ message: 'Email, OTP, and new password are required' });
     }
 
-    const user = await User.findOne({ 
+    const user = await User.findOne({
       email: String(email).trim().toLowerCase(),
       resetPasswordExpire: { $gt: Date.now() }
     });
@@ -306,7 +349,7 @@ const resetPassword = async (req, res) => {
     user.password = await bcrypt.hash(String(newPassword), salt);
     user.resetPasswordOTP = undefined;
     user.resetPasswordExpire = undefined;
-    
+
     await user.save();
 
     res.status(200).json({ message: 'Password reset successful' });
@@ -326,12 +369,12 @@ const downloadData = async (req, res) => {
     const uploadsBaseDir = path.resolve(__dirname, '../../uploads');
 
     res.attachment('HandS_UserData.zip');
-    
+
     const archive = archiver('zip', {
       zlib: { level: 9 }
     });
 
-    archive.on('error', function(err) {
+    archive.on('error', function (err) {
       console.error('Archiver error:', err);
       if (!res.headersSent) {
         res.status(500).json({ message: 'Error creating archive' });
@@ -352,7 +395,7 @@ const downloadData = async (req, res) => {
       if (post.mediaUrl && post.mediaType !== 'none') {
         const isGallery = !post.content && post.mediaType === 'image';
         const folderName = isGallery ? 'Gallery' : 'Images';
-        
+
         if (post.mediaUrl.startsWith('data:')) {
           const matches = post.mediaUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
           if (matches && matches.length === 3) {
@@ -407,9 +450,10 @@ const deleteAccount = async (req, res) => {
     if (user.partner) {
       const partnerId = user.partner;
       const pairKey = [user._id.toString(), partnerId.toString()].sort().join('_');
-      await User.findByIdAndUpdate(partnerId, { partner: null });
+      await User.findByIdAndUpdate(partnerId, { partner: null, pairedAt: null });
       await SharedListItem.deleteMany({ pair: pairKey });
       await SharedPet.deleteMany({ pair: pairKey });
+      await CoupleActivity.deleteMany({ pair: pairKey });
     }
 
     // Delete all data associated with this user
@@ -423,6 +467,7 @@ const deleteAccount = async (req, res) => {
       Question.deleteMany({ user: user._id }),
       QuestionAnswer.deleteMany({ user: user._id }),
       WatchRoom.deleteMany({ host: user._id }),
+      CoupleActivity.deleteMany({ user: user._id }),
       User.findByIdAndDelete(user._id),
     ]);
 
@@ -460,6 +505,7 @@ module.exports = {
   verifyOTP,
   resetPassword,
   updateLocation,
+  updateTrip,
   downloadData,
   deleteAccount,
   clearPendingAnimation,

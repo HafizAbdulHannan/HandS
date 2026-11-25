@@ -1,23 +1,23 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  ScrollView, 
-  Alert, 
-  Modal, 
-  TextInput, 
-  StyleSheet, 
-  KeyboardAvoidingView, 
-  Platform, 
-  Share, 
-  RefreshControl, 
-  Image, 
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  Modal,
+  TextInput,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  Share,
+  RefreshControl,
+  Image,
   ActivityIndicator,
-  PermissionsAndroid, 
+  PermissionsAndroid,
   NativeModules,
   TurboModuleRegistry,
-  Dimensions
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
@@ -36,8 +36,17 @@ import Constants from 'expo-constants';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PLAYER_HEIGHT = Math.round(SCREEN_WIDTH * (9 / 16));
 
-let createAgoraRtcEngine, ChannelProfileType, ClientRoleType, RtcSurfaceView;
+let createAgoraRtcEngine;
+let ChannelProfileType;
+let ClientRoleType;
+let AudioProfileType;
+let AudioScenarioType;
+let VideoSourceType;
+let RenderModeType;
+let RtcSurfaceView;
+let RtcTextureView;
 let isAgoraAvailable = false;
+
 try {
   const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
   if (!isExpoGo) {
@@ -51,7 +60,12 @@ try {
       createAgoraRtcEngine = agora.createAgoraRtcEngine || agora.default;
       ChannelProfileType = agora.ChannelProfileType || { ChannelProfileLiveBroadcasting: 1, ChannelProfileCommunication: 0 };
       ClientRoleType = agora.ClientRoleType || { ClientRoleBroadcaster: 1, ClientRoleAudience: 2 };
+      AudioProfileType = agora.AudioProfileType || { AudioProfileMusicStandard: 2, AudioProfileDefault: 0 };
+      AudioScenarioType = agora.AudioScenarioType || { AudioScenarioGameStreaming: 3, AudioScenarioDefault: 0 };
+      VideoSourceType = agora.VideoSourceType || { VideoSourceCameraPrimary: 0, VideoSourceScreenPrimary: 2, VideoSourceRemote: 9 };
+      RenderModeType = agora.RenderModeType || { RenderModeHidden: 1, RenderModeFit: 2 };
       RtcSurfaceView = agora.RtcSurfaceView;
+      RtcTextureView = agora.RtcTextureView;
       isAgoraAvailable = typeof createAgoraRtcEngine === 'function';
     }
   }
@@ -59,8 +73,21 @@ try {
   console.warn('Failed to load react-native-agora dynamically:', e);
 }
 
+// On Android, RtcTextureView works cleanly inside ScrollView and rounded/PIP containers.
+// On iOS, RtcSurfaceView is used.
+const AgoraVideoView = Platform.OS === 'android' ? RtcTextureView || RtcSurfaceView : RtcSurfaceView;
+
 const AGORA_APP_ID = '32e0688e8a9840579f3282e75ea6a9ac';
 let globalAgoraEngine = null;
+
+const getDeterministicAgoraUid = (userId) => {
+  const str = String(userId || Math.random());
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) % 900000;
+  }
+  return 100000 + Math.abs(hash);
+};
 
 const extractYoutubeId = (url) => {
   if (!url) return null;
@@ -83,6 +110,8 @@ const WatchRoomScreen = () => {
   const initialRoomId = route.params?.roomId || route.params?.initialRoomData?._id || null;
   const isHost = !!route.params?.isHost;
 
+  const myAgoraUidRef = useRef(getDeterministicAgoraUid(user?._id));
+
   const [roomData, setRoomData] = useState(route.params?.initialRoomData || null);
   const [currentRoomId, setCurrentRoomId] = useState(initialRoomId);
   const [isRoomLoading, setIsRoomLoading] = useState(!route.params?.initialRoomData);
@@ -90,7 +119,7 @@ const WatchRoomScreen = () => {
   const [mediaType, setMediaType] = useState('none');
   const [mediaUrl, setMediaUrl] = useState('');
   const [youtubeId, setYoutubeId] = useState('');
-  
+
   const [showMediaModal, setShowMediaModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [ytInput, setYtInput] = useState('');
@@ -102,30 +131,93 @@ const WatchRoomScreen = () => {
   const [isVideoOn, setIsVideoOn] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [activeReaction, setActiveReaction] = useState(null);
-  
+
   // Agora State
   const [isJoined, setIsJoined] = useState(false);
-  const [localUid, setLocalUid] = useState(0);
+  const [agoraStatusText, setAgoraStatusText] = useState('Connecting...');
+  const [localUid, setLocalUid] = useState(myAgoraUidRef.current);
   const [remoteUids, setRemoteUids] = useState([]);
+  const [remoteVideoUids, setRemoteVideoUids] = useState([]);
   const [isPermissionsGranted, setIsPermissionsGranted] = useState(false);
   const [isEngineInitialized, setIsEngineInitialized] = useState(false);
+
   const agoraEngineRef = useRef(null);
   const agoraEventHandlerRef = useRef(null);
   const initialMediaLoadedRef = useRef(false);
+  const isMicOnRef = useRef(false);
+  const isVideoOnRef = useRef(false);
+  const isScreenSharingRef = useRef(false);
 
   const playerRef = useRef(null);
   const reactionTimeoutRef = useRef(null);
   const videoPlayerRef = useRef(null);
 
-  // Refs to prevent stale closures inside socket handlers
+  // Refs to prevent stale closures inside socket & Agora callbacks
   const mediaTypeRef = useRef(mediaType);
   const playingRef = useRef(playing);
   useEffect(() => { mediaTypeRef.current = mediaType; }, [mediaType]);
   useEffect(() => { playingRef.current = playing; }, [playing]);
+  useEffect(() => { isMicOnRef.current = isMicOn; }, [isMicOn]);
+  useEffect(() => { isVideoOnRef.current = isVideoOn; }, [isVideoOn]);
+  useEffect(() => { isScreenSharingRef.current = isScreenSharing; }, [isScreenSharing]);
 
   const [loadingPhase, setLoadingPhase] = useState(isHost ? 3 : 0);
   const [loadingText] = useState(isHost ? 'Entering room...' : 'Connecting to room...');
   const [loadingProgress] = useState(isHost ? 100 : 60);
+
+  const buildMediaOptions = useCallback(({ mic, camera, screen }) => ({
+    channelProfile: ChannelProfileType?.ChannelProfileLiveBroadcasting ?? 1,
+    clientRoleType: ClientRoleType?.ClientRoleBroadcaster ?? 1,
+    publishMicrophoneTrack: !!mic,
+    publishCameraTrack: !!camera && !screen,
+    publishScreenCaptureVideo: !!screen,
+    publishScreenCaptureAudio: !!screen,
+    autoSubscribeAudio: true,
+    autoSubscribeVideo: true,
+  }), []);
+
+  const applyLoudSpeakerMediaAudio = useCallback((engine) => {
+    if (!engine) return;
+    try {
+      const musicProfile = AudioProfileType?.AudioProfileMusicStandard ?? 2;
+      const gameScenario = AudioScenarioType?.AudioScenarioGameStreaming ?? 3;
+      engine.setAudioProfile?.(musicProfile, gameScenario);
+      engine.setAudioScenario?.(gameScenario);
+      engine.setDefaultAudioRouteToSpeakerphone?.(true);
+      engine.setEnableSpeakerphone?.(true);
+      engine.adjustPlaybackSignalVolume?.(130);
+      engine.adjustRecordingSignalVolume?.(130);
+    } catch (e) {
+      console.warn('Audio routing setup warning:', e);
+    }
+  }, []);
+
+  const joinAgoraChannelNow = useCallback((engine) => {
+    if (!engine || !roomCode) return;
+    try {
+      applyLoudSpeakerMediaAudio(engine);
+      engine.setClientRole?.(ClientRoleType?.ClientRoleBroadcaster ?? 1);
+
+      const options = buildMediaOptions({
+        mic: isMicOnRef.current,
+        camera: isVideoOnRef.current,
+        screen: isScreenSharingRef.current,
+      });
+
+      const res = engine.joinChannel('', roomCode, myAgoraUidRef.current, options);
+      if (res === -17) {
+        engine.leaveChannel();
+        setTimeout(() => {
+          try {
+            applyLoudSpeakerMediaAudio(engine);
+            engine.joinChannel('', roomCode, myAgoraUidRef.current, options);
+          } catch (e) {}
+        }, 350);
+      }
+    } catch (err) {
+      console.warn('joinAgoraChannelNow error:', err);
+    }
+  }, [roomCode, applyLoudSpeakerMediaAudio, buildMediaOptions]);
 
   const applyMediaState = useCallback((media) => {
     if (!media || !media.type) return;
@@ -137,6 +229,11 @@ const WatchRoomScreen = () => {
       setMediaUrl(getMediaUrl(media.url));
     } else if (media.type === 'screen_share') {
       setMediaUrl(media.url || '');
+      if (agoraEngineRef.current) {
+        try {
+          agoraEngineRef.current.enableVideo();
+        } catch (e) {}
+      }
     } else {
       setMediaUrl('');
       setYoutubeId('');
@@ -151,14 +248,11 @@ const WatchRoomScreen = () => {
   const fetchRoomDetails = useCallback(async () => {
     try {
       let room = null;
-      // If guest or missing roomId, ensure user is joined in DB first
       if (!isHost || !currentRoomId) {
         try {
           const joinRes = await axiosInstance.post('/watch/join', { roomCode });
           room = joinRes?.data?.room;
-        } catch (joinErr) {
-          // fallback to GET
-        }
+        } catch (joinErr) {}
       }
       if (!room) {
         const lookupId = currentRoomId || roomCode;
@@ -182,7 +276,34 @@ const WatchRoomScreen = () => {
     }
   }, [isHost, currentRoomId, roomCode, applyMediaState]);
 
-  // Agora Initialization Sequence (Delayed slightly so navigation transition finishes cleanly)
+  const cleanupAgoraEngine = useCallback(() => {
+    const engine = agoraEngineRef.current;
+    if (!engine) return;
+    try {
+      engine.stopPreview?.();
+      if (isScreenSharingRef.current) {
+        engine.stopScreenCapture?.();
+      }
+      engine.muteLocalAudioStream?.(true);
+      engine.muteLocalVideoStream?.(true);
+      engine.enableLocalAudio?.(false);
+      engine.enableLocalVideo?.(false);
+      engine.leaveChannel?.();
+      engine.disableVideo?.();
+      engine.disableAudio?.();
+      if (agoraEventHandlerRef.current) {
+        if (typeof engine.unregisterEventHandler === 'function') {
+          engine.unregisterEventHandler(agoraEventHandlerRef.current);
+        } else if (typeof engine.removeAllListeners === 'function') {
+          engine.removeAllListeners();
+        }
+      }
+    } catch (e) {
+      console.warn('Error cleaning up Agora engine:', e);
+    }
+  }, []);
+
+  // Agora Initialization Sequence
   useEffect(() => {
     let isMounted = true;
     let initTimer = null;
@@ -211,70 +332,117 @@ const WatchRoomScreen = () => {
         setIsPermissionsGranted(hasPerms);
 
         if (!hasPerms) {
-          console.warn('Camera/Mic permissions not granted yet; skipping Agora auto-join.');
+          setAgoraStatusText('Permissions required');
           setLoadingPhase(3);
           return;
         }
 
         if (!isAgoraAvailable || !createAgoraRtcEngine) {
+          setAgoraStatusText('Native build required');
           setLoadingPhase(3);
           return;
         }
 
         if (!globalAgoraEngine) {
           globalAgoraEngine = createAgoraRtcEngine();
-          globalAgoraEngine.initialize({ 
+          globalAgoraEngine.initialize({
             appId: AGORA_APP_ID,
-            channelProfile: ChannelProfileType?.ChannelProfileCommunication ?? 0
+            channelProfile: ChannelProfileType?.ChannelProfileLiveBroadcasting ?? 1,
+            audioScenario: AudioScenarioType?.AudioScenarioGameStreaming ?? 3,
           });
         }
         const engine = globalAgoraEngine;
         agoraEngineRef.current = engine;
-        
+
         const eventHandler = {
           onJoinChannelSuccess: (connection) => {
-            if (isMounted) {
-              setIsJoined(true);
-              setLocalUid(connection?.localUid || 0);
-            }
+            if (!isMounted) return;
+            setIsJoined(true);
+            setAgoraStatusText('Live Audio/Video Ready');
+            const joinedUid = connection?.localUid || myAgoraUidRef.current;
+            setLocalUid(joinedUid);
+            applyLoudSpeakerMediaAudio(engine);
           },
           onUserJoined: (_connection, uid) => {
-            if (isMounted) {
-              try {
-                engine.enableVideo();
-              } catch (e) {}
-              setRemoteUids((prev) => (prev.includes(uid) ? prev : [...prev, uid]));
-            }
+            if (!isMounted) return;
+            try {
+              engine.enableVideo();
+              engine.muteRemoteAudioStream?.(uid, false);
+              engine.muteRemoteVideoStream?.(uid, false);
+            } catch (e) {}
+            setRemoteUids((prev) => (prev.includes(uid) ? prev : [...prev, uid]));
           },
           onUserOffline: (_connection, uid) => {
-            if (isMounted) {
-              setRemoteUids((prev) => prev.filter((id) => id !== uid));
+            if (!isMounted) return;
+            setRemoteUids((prev) => prev.filter((id) => id !== uid));
+            setRemoteVideoUids((prev) => prev.filter((id) => id !== uid));
+          },
+          onRemoteVideoStateChanged: (_connection, remoteUid, state) => {
+            if (!isMounted) return;
+            if (state === 1 || state === 2) {
+              setRemoteUids((prev) => (prev.includes(remoteUid) ? prev : [...prev, remoteUid]));
+              setRemoteVideoUids((prev) => (prev.includes(remoteUid) ? prev : [...prev, remoteUid]));
+            } else if (state === 0) {
+              setRemoteVideoUids((prev) => prev.filter((id) => id !== remoteUid));
+            }
+          },
+          onLocalVideoStateChanged: (source, state) => {
+            if (!isMounted) return;
+            const screenSource = VideoSourceType?.VideoSourceScreenPrimary ?? 2;
+            if (source === screenSource && (state === 1 || state === 2) && isScreenSharingRef.current) {
+              try {
+                applyLoudSpeakerMediaAudio(engine);
+                engine.updateChannelMediaOptions(
+                  buildMediaOptions({ mic: isMicOnRef.current, camera: false, screen: true })
+                );
+              } catch (e) {}
+            }
+          },
+          onConnectionStateChanged: (_connection, state, reason) => {
+            if (!isMounted) return;
+            if (state === 3) {
+              setIsJoined(true);
+              setAgoraStatusText('Live Audio/Video Ready');
+            } else if (state === 2 || state === 4) {
+              setAgoraStatusText('Connecting...');
+            } else if (state === 5) {
+              setIsJoined(false);
+              setAgoraStatusText(`Call Failed (${reason})`);
             }
           },
           onError: (err, msg) => {
             console.log('Agora Error:', err, msg);
-          }
+            if (isMounted && err && err !== 0) {
+              setAgoraStatusText(`RTC Warning (${err})`);
+            }
+          },
         };
+
         agoraEventHandlerRef.current = eventHandler;
         engine.registerEventHandler(eventHandler);
 
         try {
+          engine.setChannelProfile?.(ChannelProfileType?.ChannelProfileLiveBroadcasting ?? 1);
+          engine.setClientRole?.(ClientRoleType?.ClientRoleBroadcaster ?? 1);
+          applyLoudSpeakerMediaAudio(engine);
+
           engine.enableAudio();
+          engine.enableVideo();
+          engine.setVideoEncoderConfiguration?.({
+            dimensions: { width: 640, height: 480 },
+            frameRate: 24,
+            bitrate: 800,
+          });
+          engine.enableLocalAudio(false);
+          engine.enableLocalVideo(false);
           engine.muteLocalAudioStream(true);
           engine.muteLocalVideoStream(true);
 
-          engine.joinChannel('', roomCode, 0, {
-            channelProfile: ChannelProfileType?.ChannelProfileCommunication ?? 0,
-            clientRoleType: ClientRoleType?.ClientRoleBroadcaster ?? 1,
-            publishMicrophoneTrack: false,
-            publishCameraTrack: false,
-            autoSubscribeAudio: true,
-            autoSubscribeVideo: true,
-          });
+          joinAgoraChannelNow(engine);
         } catch (callErr) {
           console.warn('Agora joinChannel error:', callErr);
         }
-        
+
         if (isMounted) setIsEngineInitialized(true);
       } catch (engineError) {
         console.warn('Agora engine failed to initialize:', engineError);
@@ -287,28 +455,14 @@ const WatchRoomScreen = () => {
 
     initTimer = setTimeout(() => {
       if (isMounted) initEngine();
-    }, 350);
+    }, 300);
 
     return () => {
       isMounted = false;
       if (initTimer) clearTimeout(initTimer);
-      if (agoraEngineRef.current) {
-        try {
-          agoraEngineRef.current.stopPreview?.();
-          agoraEngineRef.current.leaveChannel();
-          if (agoraEventHandlerRef.current) {
-            if (typeof agoraEngineRef.current.unregisterEventHandler === 'function') {
-              agoraEngineRef.current.unregisterEventHandler(agoraEventHandlerRef.current);
-            } else if (typeof agoraEngineRef.current.removeAllListeners === 'function') {
-              agoraEngineRef.current.removeAllListeners();
-            }
-          }
-        } catch (e) {
-          console.warn('Error cleaning up Agora engine:', e);
-        }
-      }
+      cleanupAgoraEngine();
     };
-  }, [roomCode]);
+  }, [roomCode, applyLoudSpeakerMediaAudio, buildMediaOptions, joinAgoraChannelNow, cleanupAgoraEngine]);
 
   const showReaction = useCallback((reaction) => {
     setActiveReaction({ emoji: reaction, key: Date.now() });
@@ -353,6 +507,7 @@ const WatchRoomScreen = () => {
     const onKickUser = ({ userId }) => {
       if (userId && user?._id && userId.toString() === user._id.toString()) {
         Alert.alert('Removed from Room', 'The host has removed you from the watch party.');
+        cleanupAgoraEngine();
         navigation.goBack();
       } else {
         fetchRoomDetails();
@@ -361,6 +516,7 @@ const WatchRoomScreen = () => {
 
     const onDeleteRoom = () => {
       Alert.alert('Room Ended', 'The host has closed this watch room.');
+      cleanupAgoraEngine();
       navigation.goBack();
     };
 
@@ -401,8 +557,7 @@ const WatchRoomScreen = () => {
           }
         }
       }
-      
-      // Only seek if the difference is more than 2 seconds to avoid stutter
+
       try {
         let localTime = 0;
         if (currentType === 'youtube' && playerRef.current) {
@@ -411,7 +566,7 @@ const WatchRoomScreen = () => {
           const status = await videoPlayerRef.current.getStatusAsync();
           if (status.isLoaded) localTime = status.positionMillis / 1000;
         }
-        
+
         if (typeof timestamp === 'number' && Math.abs(localTime - timestamp) > 2.5) {
           if (currentType === 'youtube' && playerRef.current) {
             playerRef.current.seekTo(timestamp, true);
@@ -419,9 +574,7 @@ const WatchRoomScreen = () => {
             await videoPlayerRef.current.setPositionAsync(timestamp * 1000);
           }
         }
-      } catch (err) {
-        // ignore transient player read errors
-      }
+      } catch (err) {}
     };
 
     const onReceiveReaction = ({ reaction }) => {
@@ -461,7 +614,7 @@ const WatchRoomScreen = () => {
         clearTimeout(reactionTimeoutRef.current);
       }
     };
-  }, [socket, roomCode, user?._id, navigation, fetchRoomDetails, applyMediaState, showReaction]);
+  }, [socket, roomCode, user?._id, navigation, fetchRoomDetails, applyMediaState, showReaction, cleanupAgoraEngine]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -480,25 +633,28 @@ const WatchRoomScreen = () => {
     setPlaying(false);
     setShowMediaModal(false);
     setYtInput('');
-    
+
     if (socket) {
-      socket.emit('change_media', { 
-        roomCode, 
-        media: { type: 'youtube', url: id } 
+      socket.emit('change_media', {
+        roomCode,
+        media: { type: 'youtube', url: id },
       });
     }
   };
 
-  const onStateChange = useCallback((state) => {
-    if (!isHost) return;
-    if (state === 'playing') {
-      setPlaying(true);
-      socket?.emit('media_play', { roomCode, timestamp: 0 });
-    } else if (state === 'paused') {
-      setPlaying(false);
-      socket?.emit('media_pause', { roomCode, timestamp: 0 });
-    }
-  }, [isHost, socket, roomCode]);
+  const onStateChange = useCallback(
+    (state) => {
+      if (!isHost) return;
+      if (state === 'playing') {
+        setPlaying(true);
+        socket?.emit('media_play', { roomCode, timestamp: 0 });
+      } else if (state === 'paused') {
+        setPlaying(false);
+        socket?.emit('media_pause', { roomCode, timestamp: 0 });
+      }
+    },
+    [isHost, socket, roomCode]
+  );
 
   useEffect(() => {
     let syncInterval;
@@ -527,7 +683,7 @@ const WatchRoomScreen = () => {
       socket.emit('send_reaction', {
         roomCode,
         reaction: emoji,
-        senderName: user?.fullName || user?.username || user?.email || 'Partner'
+        senderName: user?.fullName || user?.username || user?.email || 'Partner',
       });
     }
   };
@@ -548,11 +704,11 @@ const WatchRoomScreen = () => {
         formData.append('media', {
           uri: Platform.OS === 'ios' ? videoAsset.uri.replace('file://', '') : videoAsset.uri,
           name: videoAsset.fileName || 'upload.mp4',
-          type: videoAsset.mimeType || 'video/mp4'
+          type: videoAsset.mimeType || 'video/mp4',
         });
 
         const res = await axiosInstance.post('/upload', formData, {
-          headers: { 'Accept': 'application/json' },
+          headers: { Accept: 'application/json' },
           onUploadProgress: (progressEvent) => {
             const total = progressEvent.total || 1;
             const percentCompleted = Math.min(99, Math.round((progressEvent.loaded * 100) / total));
@@ -560,7 +716,7 @@ const WatchRoomScreen = () => {
             if (socket) {
               socket.emit('media_uploading', { roomCode, progress: percentCompleted });
             }
-          }
+          },
         });
 
         const uploadedUrl = res.data.url;
@@ -572,11 +728,11 @@ const WatchRoomScreen = () => {
         setMediaUrl(getMediaUrl(uploadedUrl));
         setPlaying(false);
         if (videoPlayerRef.current) videoPlayerRef.current.pauseAsync().catch(() => {});
-        
+
         if (socket) {
-          socket.emit('change_media', { 
-            roomCode, 
-            media: { type: 'upload', url: uploadedUrl } 
+          socket.emit('change_media', {
+            roomCode,
+            media: { type: 'upload', url: uploadedUrl },
           });
         }
       }
@@ -593,47 +749,84 @@ const WatchRoomScreen = () => {
 
   const handleScreenShare = async () => {
     if (!isHost) return;
-    if (!agoraEngineRef.current || !isEngineInitialized) {
+    const engine = agoraEngineRef.current;
+    if (!engine || !isEngineInitialized) {
       Alert.alert('Unavailable', 'Screen sharing requires a native build with camera and microphone permissions enabled.');
       return;
     }
     try {
       if (isScreenSharing) {
-        await agoraEngineRef.current.stopScreenCapture();
-        await agoraEngineRef.current.updateChannelMediaOptions({
-          publishScreenCaptureVideo: false,
-          publishCameraTrack: isVideoOn,
-          publishScreenCaptureAudio: false,
-          publishMicrophoneTrack: isMicOn,
-        });
+        engine.stopScreenCapture();
+        engine.updateChannelMediaOptions(
+          buildMediaOptions({ mic: isMicOnRef.current, camera: false, screen: false })
+        );
         setIsScreenSharing(false);
+        isScreenSharingRef.current = false;
         setMediaType('none');
+        setMediaUrl('');
         if (socket) {
           socket.emit('change_media', { roomCode, media: { type: 'none', url: '' } });
         }
       } else {
-        await agoraEngineRef.current.enableVideo();
-        await agoraEngineRef.current.startScreenCapture({
+        if (!isJoined) {
+          joinAgoraChannelNow(engine);
+        }
+
+        if (isVideoOnRef.current) {
+          engine.stopPreview?.();
+          engine.enableLocalVideo?.(false);
+          setIsVideoOn(false);
+          isVideoOnRef.current = false;
+        }
+
+        applyLoudSpeakerMediaAudio(engine);
+        engine.enableVideo();
+        engine.muteLocalVideoStream(false);
+
+        const capRes = engine.startScreenCapture({
           captureVideo: true,
           captureAudio: true,
           videoParams: {
             dimensions: { width: 1280, height: 720 },
             frameRate: 15,
-            bitrate: 1000,
-          }
+            bitrate: 1200,
+          },
+          audioParams: {
+            sampleRate: 48000,
+            channels: 2,
+            captureSignalVolume: 100,
+          },
         });
-        await agoraEngineRef.current.updateChannelMediaOptions({
-          publishScreenCaptureVideo: true,
-          publishCameraTrack: false,
-          publishScreenCaptureAudio: true,
-          publishMicrophoneTrack: isMicOn,
-        });
+
+        if (capRes !== 0) {
+          console.warn('startScreenCapture returned:', capRes);
+        }
+
+        isScreenSharingRef.current = true;
         setIsScreenSharing(true);
         setMediaType('screen_share');
+
+        const hostShareUid = String(localUid || myAgoraUidRef.current);
+        setMediaUrl(hostShareUid);
+
+        engine.updateChannelMediaOptions(
+          buildMediaOptions({ mic: isMicOnRef.current, camera: false, screen: true })
+        );
+
+        setTimeout(() => {
+          if (isScreenSharingRef.current && agoraEngineRef.current) {
+            try {
+              agoraEngineRef.current.updateChannelMediaOptions(
+                buildMediaOptions({ mic: isMicOnRef.current, camera: false, screen: true })
+              );
+            } catch (e) {}
+          }
+        }, 1800);
+
         if (socket) {
           socket.emit('change_media', {
             roomCode,
-            media: { type: 'screen_share', url: String(localUid || 0) }
+            media: { type: 'screen_share', url: hostShareUid },
           });
         }
       }
@@ -649,13 +842,14 @@ const WatchRoomScreen = () => {
       'Are you sure you want to delete this room? This will end the watch party for everyone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        {
+          text: 'Delete',
           style: 'destructive',
           onPress: async () => {
             try {
               setIsVideoOn(false);
               setIsScreenSharing(false);
+              cleanupAgoraEngine();
               if (socket) {
                 socket.emit('delete_room', { roomCode });
               }
@@ -667,10 +861,36 @@ const WatchRoomScreen = () => {
               setShowSettingsModal(false);
               navigation.goBack();
             }
-          }
-        }
+          },
+        },
       ]
     );
+  };
+
+  const performLeaveRoom = () => {
+    setIsVideoOn(false);
+    setIsScreenSharing(false);
+    setShowSettingsModal(false);
+    cleanupAgoraEngine();
+    if (socket) {
+      socket.emit('leave_watch_room', { roomCode });
+    }
+    navigation.goBack();
+  };
+
+  const handleLeaveRoom = () => {
+    if (isHost) {
+      Alert.alert('Leave Room', 'Do you want to just leave, or delete the room for everyone?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Leave Only', onPress: performLeaveRoom },
+        { text: 'Delete Room', style: 'destructive', onPress: handleDeleteRoom },
+      ]);
+    } else {
+      Alert.alert('Leave Room', 'Are you sure you want to leave this Watch Together room?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Leave Room', style: 'destructive', onPress: performLeaveRoom },
+      ]);
+    }
   };
 
   const handleShareCode = async () => {
@@ -695,32 +915,9 @@ const WatchRoomScreen = () => {
         roomCode,
         roomId: currentRoomId || roomData?._id,
         hostId: user._id,
-        hostName: user.fullName || user.username || user.email
+        hostName: user.fullName || user.username || user.email,
       });
       Toast.show({ type: 'success', text1: 'Invite Sent! 🍿', text2: 'An invite has been sent to your partner.' });
-    }
-  };
-
-  const handleGoBack = () => {
-    if (isHost) {
-      Alert.alert(
-        'Leave Room',
-        'Do you want to just leave, or delete the room for everyone?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Leave Only', onPress: () => {
-            setIsVideoOn(false);
-            setIsScreenSharing(false);
-            if (socket) socket.emit('leave_watch_room', { roomCode });
-            navigation.goBack();
-          }},
-          { text: 'Delete Room', style: 'destructive', onPress: handleDeleteRoom }
-        ]
-      );
-    } else {
-      setIsVideoOn(false);
-      if (socket) socket.emit('leave_watch_room', { roomCode });
-      navigation.goBack();
     }
   };
 
@@ -732,27 +929,44 @@ const WatchRoomScreen = () => {
         return;
       }
     }
-    
-    if (!agoraEngineRef.current) {
+
+    const engine = agoraEngineRef.current;
+    if (!engine) {
       Toast.show({ type: 'info', text1: 'Voice Call Unavailable', text2: 'Audio engine is only available in the installed app build.' });
       return;
     }
 
     try {
       const newMicState = !isMicOn;
-      if (newMicState) {
-        await agoraEngineRef.current.enableLocalAudio(true);
-        await agoraEngineRef.current.muteLocalAudioStream(false);
-        await agoraEngineRef.current.updateChannelMediaOptions({
-          publishMicrophoneTrack: true,
-        });
-      } else {
-        await agoraEngineRef.current.muteLocalAudioStream(true);
-        await agoraEngineRef.current.updateChannelMediaOptions({
-          publishMicrophoneTrack: false,
-        });
-      }
+      isMicOnRef.current = newMicState;
       setIsMicOn(newMicState);
+
+      if (!isJoined) {
+        joinAgoraChannelNow(engine);
+      }
+
+      applyLoudSpeakerMediaAudio(engine);
+      engine.setClientRole?.(ClientRoleType?.ClientRoleBroadcaster ?? 1);
+
+      if (newMicState) {
+        engine.enableAudio();
+        engine.enableLocalAudio(true);
+        engine.muteLocalAudioStream(false);
+        engine.setEnableSpeakerphone?.(true);
+        engine.adjustRecordingSignalVolume?.(150);
+        engine.adjustPlaybackSignalVolume?.(140);
+      } else {
+        engine.muteLocalAudioStream(true);
+        engine.enableLocalAudio(false);
+      }
+
+      engine.updateChannelMediaOptions(
+        buildMediaOptions({
+          mic: newMicState,
+          camera: isVideoOnRef.current,
+          screen: isScreenSharingRef.current,
+        })
+      );
     } catch (e) {
       console.warn('Toggle mic error:', e);
     }
@@ -766,39 +980,84 @@ const WatchRoomScreen = () => {
         return;
       }
     }
-    
-    if (!agoraEngineRef.current) {
+
+    const engine = agoraEngineRef.current;
+    if (!engine) {
       Toast.show({ type: 'info', text1: 'Video Call Unavailable', text2: 'Video engine is only available in the installed app build.' });
       return;
     }
 
     try {
       const newVideoState = !isVideoOn;
-      if (newVideoState) {
-        await agoraEngineRef.current.enableVideo();
-        await agoraEngineRef.current.enableLocalVideo(true);
-        await agoraEngineRef.current.muteLocalVideoStream(false);
-        await agoraEngineRef.current.updateChannelMediaOptions({
-          publishCameraTrack: true,
-        });
-        agoraEngineRef.current.startPreview();
-      } else {
-        await agoraEngineRef.current.muteLocalVideoStream(true);
-        await agoraEngineRef.current.updateChannelMediaOptions({
-          publishCameraTrack: false,
-        });
-        await agoraEngineRef.current.enableLocalVideo(false);
-        agoraEngineRef.current.stopPreview();
+
+      if (newVideoState && isScreenSharingRef.current) {
+        engine.stopScreenCapture?.();
+        setIsScreenSharing(false);
+        isScreenSharingRef.current = false;
+        setMediaType('none');
+        if (socket) {
+          socket.emit('change_media', { roomCode, media: { type: 'none', url: '' } });
+        }
       }
+
+      isVideoOnRef.current = newVideoState;
       setIsVideoOn(newVideoState);
+
+      if (!isJoined) {
+        joinAgoraChannelNow(engine);
+      }
+
+      engine.setClientRole?.(ClientRoleType?.ClientRoleBroadcaster ?? 1);
+
+      if (newVideoState) {
+        engine.enableVideo();
+        engine.enableLocalVideo(true);
+        engine.muteLocalVideoStream(false);
+        engine.startPreview(VideoSourceType?.VideoSourceCameraPrimary ?? 0);
+      } else {
+        engine.muteLocalVideoStream(true);
+        engine.enableLocalVideo(false);
+        engine.stopPreview(VideoSourceType?.VideoSourceCameraPrimary ?? 0);
+      }
+
+      engine.updateChannelMediaOptions(
+        buildMediaOptions({
+          mic: isMicOnRef.current,
+          camera: newVideoState,
+          screen: false,
+        })
+      );
     } catch (e) {
       console.warn('Toggle video error:', e);
     }
   };
 
+  const handleSwitchCamera = () => {
+    try {
+      agoraEngineRef.current?.switchCamera?.();
+    } catch (e) {}
+  };
+
   const participants = (roomData?.participants || []).filter(Boolean);
   const hostId = typeof roomData?.host === 'object' ? roomData?.host?._id : roomData?.host;
-  const screenShareUid = parseInt(mediaUrl, 10) || remoteUids[0] || 0;
+
+  const parsedShareUid = parseInt(mediaUrl, 10);
+  const screenShareUid =
+    mediaType === 'screen_share'
+      ? (Number.isFinite(parsedShareUid) && parsedShareUid > 0
+          ? parsedShareUid
+          : remoteVideoUids[0] || remoteUids[0] || 0)
+      : 0;
+
+  const activeRemoteCameraUid =
+    mediaType === 'screen_share'
+      ? remoteVideoUids.find((uid) => uid !== screenShareUid) || 0
+      : remoteVideoUids[0] || remoteUids[0] || 0;
+
+  const showVideoCallPanel =
+    (isVideoOn || (activeRemoteCameraUid > 0 && mediaType !== 'screen_share')) &&
+    isEngineInitialized &&
+    isPermissionsGranted;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'bottom']}>
@@ -814,7 +1073,7 @@ const WatchRoomScreen = () => {
 
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-        <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
+        <TouchableOpacity onPress={handleLeaveRoom} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
@@ -826,9 +1085,17 @@ const WatchRoomScreen = () => {
           </Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity onPress={handleAddParticipant} style={[styles.settingsButton, { marginRight: 6 }]}>
-            <Ionicons name="person-add-outline" size={22} color={theme.colors.primary} />
-          </TouchableOpacity>
+          {!isHost && (
+            <TouchableOpacity onPress={handleLeaveRoom} style={styles.headerLeavePill}>
+              <Ionicons name="exit-outline" size={16} color="#ff4757" />
+              <Text style={styles.headerLeaveText}>Leave</Text>
+            </TouchableOpacity>
+          )}
+          {isHost && (
+            <TouchableOpacity onPress={handleAddParticipant} style={[styles.settingsButton, { marginRight: 6 }]}>
+              <Ionicons name="person-add-outline" size={22} color={theme.colors.primary} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={() => setShowSettingsModal(true)} style={styles.settingsButton}>
             <Ionicons name="settings-outline" size={24} color={theme.colors.text} />
           </TouchableOpacity>
@@ -839,9 +1106,7 @@ const WatchRoomScreen = () => {
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
       >
         {/* Media Area */}
         <View style={[styles.mediaContainer, { backgroundColor: '#000' }]}>
@@ -899,18 +1164,45 @@ const WatchRoomScreen = () => {
             </View>
           ) : mediaType === 'screen_share' ? (
             <View style={styles.playerWrapper}>
-              <View pointerEvents={isHost ? 'auto' : 'none'} style={styles.playerInner}>
+              <View style={styles.playerInner}>
                 {isHost ? (
-                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                    <Ionicons name="desktop-outline" size={60} color={theme.colors.primary} />
-                    <Text style={{ color: '#fff', marginTop: 10, fontSize: 16 }}>You are sharing your screen</Text>
+                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+                    <Ionicons name="desktop-outline" size={52} color={theme.colors.primary} />
+                    <Text style={{ color: '#fff', marginTop: 10, fontSize: 16, fontWeight: '700' }}>
+                      You are sharing your screen
+                    </Text>
+                    <Text style={{ color: '#bbb', marginTop: 4, fontSize: 12, textAlign: 'center' }}>
+                      Switch to any app or video and your partner will see it live.
+                    </Text>
+                    <TouchableOpacity
+                      style={{ marginTop: 14, backgroundColor: '#ff4757', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20 }}
+                      onPress={handleScreenShare}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '700' }}>Stop Sharing</Text>
+                    </TouchableOpacity>
                   </View>
-                ) : isJoined && isEngineInitialized && isPermissionsGranted && isAgoraAvailable && RtcSurfaceView && screenShareUid ? (
-                  <RtcSurfaceView canvas={{ uid: screenShareUid }} style={{ flex: 1 }} />
+                ) : isEngineInitialized && isPermissionsGranted && isAgoraAvailable && AgoraVideoView && screenShareUid > 0 ? (
+                  <AgoraVideoView
+                    key={`screen_${screenShareUid}`}
+                    canvas={{
+                      uid: screenShareUid,
+                      sourceType: VideoSourceType?.VideoSourceRemote ?? 9,
+                      renderMode: RenderModeType?.RenderModeFit ?? 2,
+                    }}
+                    style={{ width: '100%', height: '100%' }}
+                  />
                 ) : (
                   <View style={styles.noMediaContainer}>
                     <ActivityIndicator size="large" color={theme.colors.primary} />
                     <Text style={styles.noMediaText}>Connecting to host screen share...</Text>
+                    {!isJoined && agoraEngineRef.current && (
+                      <TouchableOpacity
+                        style={{ marginTop: 12, backgroundColor: theme.colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 16 }}
+                        onPress={() => joinAgoraChannelNow(agoraEngineRef.current)}
+                      >
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Tap to Reconnect</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 )}
               </View>
@@ -930,7 +1222,7 @@ const WatchRoomScreen = () => {
           <View style={[styles.controlsContainer, { borderBottomColor: theme.colors.border }]}>
             <Text style={[styles.controlsTitle, { color: theme.colors.text }]}>Host Controls</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.controlsRow}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.controlButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1 }]}
                 onPress={() => setShowMediaModal(true)}
               >
@@ -938,7 +1230,7 @@ const WatchRoomScreen = () => {
                 <Text style={[styles.controlButtonText, { color: theme.colors.text }]}>YouTube</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.controlButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1 }]}
                 onPress={handleUploadVideo}
                 disabled={uploading}
@@ -948,8 +1240,8 @@ const WatchRoomScreen = () => {
                   {uploading ? 'Uploading...' : 'Upload Video'}
                 </Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[styles.controlButton, { backgroundColor: isScreenSharing ? '#ff4757' : theme.colors.card, borderColor: theme.colors.border, borderWidth: 1 }]}
                 onPress={handleScreenShare}
               >
@@ -964,30 +1256,72 @@ const WatchRoomScreen = () => {
 
         {/* Call Controls (For Everyone) */}
         <View style={[styles.controlsContainer, { borderBottomColor: theme.colors.border }]}>
-          <Text style={[styles.controlsTitle, { color: theme.colors.text }]}>Call Controls</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.controlsRow}>
-            <TouchableOpacity 
-              style={[styles.controlButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1 }]}
+          <View style={styles.controlsHeaderRow}>
+            <Text style={[styles.controlsTitle, { color: theme.colors.text, marginBottom: 0 }]}>Call Controls</Text>
+            <TouchableOpacity
+              onPress={() => {
+                if (!isJoined && agoraEngineRef.current) {
+                  joinAgoraChannelNow(agoraEngineRef.current);
+                  Toast.show({ type: 'info', text1: 'Reconnecting call...' });
+                }
+              }}
+              style={[
+                styles.rtcStatusPill,
+                { backgroundColor: isJoined ? 'rgba(46, 204, 113, 0.14)' : 'rgba(245, 158, 11, 0.14)' },
+              ]}
+            >
+              <View style={[styles.rtcStatusDot, { backgroundColor: isJoined ? '#2ecc71' : '#f59e0b' }]} />
+              <Text style={{ fontSize: 11, fontWeight: '700', color: isJoined ? '#2ecc71' : '#d97706' }}>
+                {agoraStatusText}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.controlsRow, { marginTop: 10 }]}>
+            <TouchableOpacity
+              style={[
+                styles.controlButton,
+                {
+                  backgroundColor: isMicOn ? 'rgba(46, 204, 113, 0.14)' : theme.colors.card,
+                  borderColor: isMicOn ? '#2ecc71' : theme.colors.border,
+                  borderWidth: 1,
+                },
+              ]}
               onPress={handleToggleMic}
             >
               <Ionicons name={isMicOn ? 'mic' : 'mic-off'} size={22} color={isMicOn ? '#2ecc71' : '#ff4757'} />
               <Text style={[styles.controlButtonText, { color: theme.colors.text }]}>{isMicOn ? 'Mic On' : 'Mic Muted'}</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.controlButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1 }]}
+
+            <TouchableOpacity
+              style={[
+                styles.controlButton,
+                {
+                  backgroundColor: isVideoOn ? 'rgba(46, 204, 113, 0.14)' : theme.colors.card,
+                  borderColor: isVideoOn ? '#2ecc71' : theme.colors.border,
+                  borderWidth: 1,
+                },
+              ]}
               onPress={handleToggleVideo}
             >
               <Ionicons name={isVideoOn ? 'videocam' : 'videocam-off'} size={22} color={isVideoOn ? '#2ecc71' : '#ff4757'} />
               <Text style={[styles.controlButtonText, { color: theme.colors.text }]}>{isVideoOn ? 'Video On' : 'Video Off'}</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.controlButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, borderWidth: 1 }]}
               onPress={handleAddParticipant}
             >
               <Ionicons name="person-add-outline" size={22} color={theme.colors.primary} />
               <Text style={[styles.controlButtonText, { color: theme.colors.text }]}>Invite Partner</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.controlButton, { backgroundColor: 'rgba(255, 71, 87, 0.14)', borderColor: 'rgba(255, 71, 87, 0.35)', borderWidth: 1 }]}
+              onPress={handleLeaveRoom}
+            >
+              <Ionicons name="exit-outline" size={22} color="#ff4757" />
+              <Text style={[styles.controlButtonText, { color: '#ff4757' }]}>Leave Room</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -1009,26 +1343,54 @@ const WatchRoomScreen = () => {
 
         {/* Participants & Video Call */}
         <View style={styles.participantsSection}>
-          {(isVideoOn || remoteUids.length > 0) && isJoined && isEngineInitialized && isPermissionsGranted && (
+          {showVideoCallPanel && (
             <>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Live Video Call</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <Text style={[styles.sectionTitle, { color: theme.colors.text, marginBottom: 0 }]}>Live Video Call</Text>
+                {isVideoOn && (
+                  <TouchableOpacity
+                    style={[styles.flipCameraBtn, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+                    onPress={handleSwitchCamera}
+                  >
+                    <Ionicons name="camera-reverse-outline" size={18} color={theme.colors.primary} />
+                    <Text style={{ color: theme.colors.text, fontSize: 12, fontWeight: '600', marginLeft: 4 }}>Flip</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
               <View style={[styles.videoCallContainer, { backgroundColor: '#000' }]}>
-                {remoteUids.length > 0 ? (
+                {activeRemoteCameraUid > 0 ? (
                   <View style={styles.agoraVideoContainer}>
-                    {isAgoraAvailable && RtcSurfaceView ? (
-                      <RtcSurfaceView canvas={{ uid: remoteUids[0] }} style={styles.agoraVideoView} />
+                    {isAgoraAvailable && AgoraVideoView ? (
+                      <AgoraVideoView
+                        key={`remote_${activeRemoteCameraUid}`}
+                        canvas={{
+                          uid: activeRemoteCameraUid,
+                          sourceType: VideoSourceType?.VideoSourceRemote ?? 9,
+                          renderMode: RenderModeType?.RenderModeHidden ?? 1,
+                        }}
+                        style={styles.agoraVideoView}
+                      />
                     ) : (
                       <View style={[styles.agoraVideoView, { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' }]}>
                         <Ionicons name="person" size={40} color="#666" />
                       </View>
                     )}
+
+                    <View style={styles.localVideoLabel}>
+                      <Text style={styles.localVideoLabelText}>Partner</Text>
+                    </View>
+
                     {isVideoOn && (
                       <View style={[styles.pipVideoContainer, { borderColor: theme.colors.primary }]}>
-                        {isAgoraAvailable && RtcSurfaceView ? (
-                          <RtcSurfaceView
-                            canvas={{ uid: 0 }}
-                            zOrderMediaOverlay={true}
-                            zOrderOnTop={true}
+                        {isAgoraAvailable && AgoraVideoView ? (
+                          <AgoraVideoView
+                            key="local_pip"
+                            canvas={{
+                              uid: 0,
+                              sourceType: VideoSourceType?.VideoSourceCameraPrimary ?? 0,
+                              renderMode: RenderModeType?.RenderModeHidden ?? 1,
+                            }}
                             style={styles.agoraVideoView}
                           />
                         ) : (
@@ -1043,15 +1405,23 @@ const WatchRoomScreen = () => {
                   <View style={styles.mainVideoContainer}>
                     {isVideoOn ? (
                       <>
-                        {isAgoraAvailable && RtcSurfaceView ? (
-                          <RtcSurfaceView canvas={{ uid: 0 }} style={styles.agoraVideoView} />
+                        {isAgoraAvailable && AgoraVideoView ? (
+                          <AgoraVideoView
+                            key="local_main"
+                            canvas={{
+                              uid: 0,
+                              sourceType: VideoSourceType?.VideoSourceCameraPrimary ?? 0,
+                              renderMode: RenderModeType?.RenderModeHidden ?? 1,
+                            }}
+                            style={styles.agoraVideoView}
+                          />
                         ) : (
                           <View style={[styles.agoraVideoView, { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' }]}>
                             <Ionicons name="videocam" size={40} color="#666" />
                           </View>
                         )}
                         <View style={styles.localVideoLabel}>
-                          <Text style={styles.localVideoLabelText}>You (Waiting for partner video)</Text>
+                          <Text style={styles.localVideoLabelText}>You (Camera On)</Text>
                         </View>
                       </>
                     ) : (
@@ -1081,9 +1451,7 @@ const WatchRoomScreen = () => {
                   {user.avatar ? (
                     <Image source={{ uri: getMediaUrl(user.avatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
                   ) : (
-                    <Text style={styles.avatarText}>
-                      {(user.fullName || user.username || 'U').charAt(0).toUpperCase()}
-                    </Text>
+                    <Text style={styles.avatarText}>{(user.fullName || user.username || 'U').charAt(0).toUpperCase()}</Text>
                   )}
                 </View>
                 <Text style={[styles.participantName, { color: theme.colors.text }]}>
@@ -1094,7 +1462,7 @@ const WatchRoomScreen = () => {
           ) : (
             participants.map((p, index) => {
               const pId = typeof p === 'object' ? p._id : p;
-              const pName = typeof p === 'object' ? (p.fullName || p.username || p.email || 'Participant') : 'Participant';
+              const pName = typeof p === 'object' ? p.fullName || p.username || p.email || 'Participant' : 'Participant';
               const pAvatar = typeof p === 'object' ? p.avatar : null;
               const isParticipantHost = hostId && pId && hostId.toString() === pId.toString();
 
@@ -1108,18 +1476,16 @@ const WatchRoomScreen = () => {
                       {pAvatar ? (
                         <Image source={{ uri: getMediaUrl(pAvatar) }} style={{ width: '100%', height: '100%', resizeMode: 'cover' }} />
                       ) : (
-                        <Text style={styles.avatarText}>
-                          {pName.charAt(0).toUpperCase()}
-                        </Text>
+                        <Text style={styles.avatarText}>{pName.charAt(0).toUpperCase()}</Text>
                       )}
                     </View>
                     <Text style={[styles.participantName, { color: theme.colors.text }]}>
                       {pName} {isParticipantHost ? '(Host)' : ''}
                     </Text>
                   </View>
-                  
+
                   {isHost && pId && user?._id && pId.toString() !== user._id.toString() && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.kickButton}
                       onPress={() => {
                         socket?.emit('kick_user', { roomCode, userId: pId });
@@ -1141,10 +1507,7 @@ const WatchRoomScreen = () => {
 
       {/* Media Selection Modal */}
       <Modal visible={showMediaModal} animationType="slide" transparent={true} onRequestClose={() => setShowMediaModal(false)}>
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.colors.card }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Play YouTube Video</Text>
@@ -1152,11 +1515,11 @@ const WatchRoomScreen = () => {
                 <Ionicons name="close" size={24} color={theme.colors.text} />
               </TouchableOpacity>
             </View>
-            
+
             <Text style={[styles.modalSubtitle, { color: theme.colors.textSecondary }]}>
               Paste a YouTube video link or Shorts URL below to sync playback with the room.
             </Text>
-            
+
             <TextInput
               style={[styles.modalInput, { backgroundColor: theme.colors.inputBackground, color: theme.colors.text, borderColor: theme.colors.border }]}
               placeholder="https://www.youtube.com/watch?v=..."
@@ -1166,11 +1529,8 @@ const WatchRoomScreen = () => {
               autoCapitalize="none"
               autoCorrect={false}
             />
-            
-            <TouchableOpacity 
-              style={[styles.modalButton, { backgroundColor: theme.colors.primary }]}
-              onPress={handleChangeMedia}
-            >
+
+            <TouchableOpacity style={[styles.modalButton, { backgroundColor: theme.colors.primary }]} onPress={handleChangeMedia}>
               <Ionicons name="play" size={20} color="#fff" style={{ marginRight: 8 }} />
               <Text style={styles.modalButtonText}>Play for Everyone</Text>
             </TouchableOpacity>
@@ -1188,26 +1548,23 @@ const WatchRoomScreen = () => {
                 <Ionicons name="close" size={24} color={theme.colors.text} />
               </TouchableOpacity>
             </View>
-            
+
             <View style={[styles.infoRow, { borderBottomColor: theme.colors.border }]}>
               <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>Room Name</Text>
               <Text style={[styles.infoValue, { color: theme.colors.text }]}>{roomData?.roomName || 'Watch Room'}</Text>
             </View>
-            
+
             <View style={[styles.infoRow, { borderBottomColor: theme.colors.border }]}>
               <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>Room Code</Text>
               <Text style={[styles.infoValue, { color: theme.colors.primary, fontWeight: 'bold' }]}>{roomCode}</Text>
             </View>
-            
-            <TouchableOpacity 
-              style={[styles.settingsActionBtn, { backgroundColor: theme.colors.inputBackground }]}
-              onPress={handleShareCode}
-            >
+
+            <TouchableOpacity style={[styles.settingsActionBtn, { backgroundColor: theme.colors.inputBackground }]} onPress={handleShareCode}>
               <Ionicons name="share-social-outline" size={22} color={theme.colors.primary} style={{ marginRight: 10 }} />
               <Text style={[styles.settingsActionText, { color: theme.colors.text }]}>Share Code</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[styles.settingsActionBtn, { backgroundColor: theme.colors.inputBackground, marginTop: 10 }]}
               onPress={() => {
                 setShowSettingsModal(false);
@@ -1218,13 +1575,24 @@ const WatchRoomScreen = () => {
               <Text style={[styles.settingsActionText, { color: theme.colors.text }]}>Invite Partner</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity
+              style={[styles.settingsActionBtn, { backgroundColor: 'rgba(255, 71, 87, 0.12)', marginTop: 10 }]}
+              onPress={() => {
+                setShowSettingsModal(false);
+                handleLeaveRoom();
+              }}
+            >
+              <Ionicons name="exit-outline" size={22} color="#ff4757" style={{ marginRight: 10 }} />
+              <Text style={[styles.settingsActionText, { color: '#ff4757' }]}>Leave Room</Text>
+            </TouchableOpacity>
+
             {isHost && (
-              <TouchableOpacity 
-                style={[styles.settingsActionBtn, { backgroundColor: 'rgba(255, 71, 87, 0.12)', marginTop: 10 }]}
+              <TouchableOpacity
+                style={[styles.settingsActionBtn, { backgroundColor: 'rgba(255, 71, 87, 0.18)', marginTop: 10 }]}
                 onPress={handleDeleteRoom}
               >
                 <Ionicons name="trash-outline" size={22} color="#ff4757" style={{ marginRight: 10 }} />
-                <Text style={[styles.settingsActionText, { color: '#ff4757' }]}>Delete Room</Text>
+                <Text style={[styles.settingsActionText, { color: '#ff4757', fontWeight: '700' }]}>Delete Room</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -1235,101 +1603,88 @@ const WatchRoomScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 15,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     borderBottomWidth: 1,
   },
-  backButton: {
-    padding: 5,
-  },
-  headerTitleContainer: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  headerRight: {
+  backButton: { padding: 5 },
+  headerTitleContainer: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
+  headerTitle: { fontSize: 17, fontWeight: 'bold' },
+  headerSubtitle: { fontSize: 12, fontWeight: '700', marginTop: 2 },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
+  headerLeavePill: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 71, 87, 0.14)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    marginRight: 6,
+    gap: 4,
   },
-  settingsButton: {
-    padding: 5,
-  },
+  headerLeaveText: { color: '#ff4757', fontSize: 12, fontWeight: '700' },
+  settingsButton: { padding: 5 },
   mediaContainer: {
     width: '100%',
     height: PLAYER_HEIGHT,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  playerWrapper: {
-    width: '100%',
-    height: '100%',
-  },
-  playerInner: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  noMediaContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  noMediaText: {
-    color: '#aaa',
-    marginTop: 10,
-    fontSize: 15,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  controlsContainer: {
-    padding: 15,
-    borderBottomWidth: 1,
-  },
-  controlsTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  controlsRow: {
+  playerWrapper: { width: '100%', height: '100%' },
+  playerInner: { flex: 1, alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' },
+  noMediaContainer: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  noMediaText: { color: '#aaa', marginTop: 10, fontSize: 15, fontWeight: '500', textAlign: 'center' },
+  controlsContainer: { padding: 15, borderBottomWidth: 1 },
+  controlsHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
+  rtcStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 5,
+  },
+  rtcStatusDot: { width: 7, height: 7, borderRadius: 4 },
+  controlsTitle: { fontSize: 15, fontWeight: 'bold', marginBottom: 10 },
+  controlsRow: { flexDirection: 'row', justifyContent: 'flex-start' },
   controlButton: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 15,
     borderRadius: 12,
-    marginRight: 12,
+    marginRight: 10,
     flexDirection: 'row',
   },
-  controlButtonText: {
-    fontWeight: '600',
-    fontSize: 14,
-    marginLeft: 8,
+  controlButtonText: { fontWeight: '600', fontSize: 14, marginLeft: 7 },
+  reactionTabContainer: { paddingVertical: 12, borderBottomWidth: 1 },
+  reactionScroll: { paddingHorizontal: 15, alignItems: 'center' },
+  reactionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
   },
-  participantsSection: {
-    padding: 15,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    marginBottom: 12,
+  reactionEmoji: { fontSize: 22 },
+  participantsSection: { padding: 15 },
+  sectionTitle: { fontSize: 17, fontWeight: 'bold', marginBottom: 12 },
+  flipCameraBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
   },
   participantRow: {
     flexDirection: 'row',
@@ -1339,11 +1694,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 10,
   },
-  participantInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
+  participantInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   avatar: {
     width: 40,
     height: 40,
@@ -1352,99 +1703,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  avatarText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  participantName: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  kickButton: {
-    padding: 8,
-    backgroundColor: 'rgba(255, 71, 87, 0.12)',
-    borderRadius: 8,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end',
-  },
+  avatarText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  participantName: { fontSize: 16, fontWeight: '600' },
+  kickButton: { padding: 8, backgroundColor: 'rgba(255, 71, 87, 0.12)', borderRadius: 8 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
   modalContent: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    marginBottom: 20,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 15,
-    fontSize: 16,
-    marginBottom: 20,
-  },
-  modalButton: {
-    flexDirection: 'row',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  modalOverlayCentered: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  settingsModalContent: {
-    width: '85%',
-    borderRadius: 20,
-    padding: 20,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  infoLabel: {
-    fontSize: 16,
-  },
-  infoValue: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  settingsActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-    borderRadius: 12,
-    marginTop: 20,
-  },
-  settingsActionText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold' },
+  modalSubtitle: { fontSize: 14, marginBottom: 20 },
+  modalInput: { borderWidth: 1, borderRadius: 12, padding: 15, fontSize: 16, marginBottom: 20 },
+  modalButton: { flexDirection: 'row', padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  modalButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  modalOverlayCentered: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center' },
+  settingsModalContent: { width: '85%', borderRadius: 20, padding: 20 },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1 },
+  infoLabel: { fontSize: 16 },
+  infoValue: { fontSize: 16, fontWeight: '500' },
+  settingsActionBtn: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, marginTop: 16 },
+  settingsActionText: { fontSize: 15, fontWeight: '600' },
   videoCallContainer: {
     width: '100%',
     aspectRatio: 16 / 9,
@@ -1453,16 +1734,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     backgroundColor: '#000',
   },
-  agoraVideoContainer: {
-    flex: 1,
-    position: 'relative',
-    backgroundColor: '#000',
-  },
-  mainVideoContainer: {
-    flex: 1,
-    position: 'relative',
-    backgroundColor: '#000',
-  },
+  agoraVideoContainer: { flex: 1, position: 'relative', backgroundColor: '#000' },
+  mainVideoContainer: { flex: 1, position: 'relative', backgroundColor: '#000' },
   pipVideoContainer: {
     position: 'absolute',
     bottom: 12,
@@ -1474,10 +1747,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     overflow: 'hidden',
     elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
     zIndex: 999,
   },
   localVideoLabel: {
@@ -1490,35 +1759,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     zIndex: 10,
   },
-  localVideoLabelText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  agoraVideoView: {
-    width: '100%',
-    height: '100%',
-  },
-  reactionTabContainer: {
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  reactionScroll: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  reactionButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  reactionEmoji: {
-    fontSize: 22,
-  },
+  localVideoLabelText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  agoraVideoView: { width: '100%', height: '100%' },
 });
 
 export default WatchRoomScreen;
